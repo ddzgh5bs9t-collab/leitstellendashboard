@@ -1,0 +1,2044 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Einsatz-Dashboard Rettungsdienst</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #eef2ff;
+      --bg-card: #ffffff;
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --border: #e5e7eb;
+      --text: #0f172a;
+      --muted: #6b7280;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --status1: #0ea5e9;
+      --status2: #22c55e;
+      --status3: #f97316;
+      --status4: #ef4444;
+      --status6: #6b7280;
+      --status7: #a855f7;
+      --status8: #10b981;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: radial-gradient(circle at top left, #e0f2fe, #eef2ff);
+      color: var(--text);
+    }
+
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 280px;
+      background: linear-gradient(180deg, #0f172a, #111827);
+      color: #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      padding: 18px;
+    }
+
+    .sidebar-header {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 28px;
+    }
+
+    .nav-item {
+      padding: 12px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #e5e7eb;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .nav-item.active {
+      background: rgba(59, 130, 246, 0.55);
+    }
+
+    .nav-item:hover {
+      background: rgba(148, 163, 184, 0.25);
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .topbar-title {
+      font-weight: 700;
+      font-size: 20px;
+    }
+
+    .topbar-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .content {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+      border: 1px solid rgba(148,163,184,0.3);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .card-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #ffffff;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    .btn-block {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    @media (min-width: 900px) {
+      .grid-2 {
+        grid-template-columns: 1.3fr 1fr;
+      }
+      .grid-2-equal {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 14px;
+    }
+
+    label { font-weight: 500; }
+
+    input[type="text"],
+    input[type="number"],
+    select,
+    textarea {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    textarea {
+      border-radius: 12px;
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .checkbox-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .checkbox-row label { font-weight: 400; }
+
+    .status-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-1 { background: var(--status1); }
+    .status-2 { background: var(--status2); }
+    .status-3 { background: var(--status3); }
+    .status-4 { background: var(--status4); }
+    .status-6 { background: var(--status6); }
+    .status-7 { background: var(--status7); }
+    .status-8 { background: var(--status8); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    th {
+      background: #eff6ff;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    tr:hover td {
+      background: #f9fafb;
+    }
+
+    .text-right { text-align: right; }
+    .muted { color: var(--muted); }
+
+    .badge-first {
+      background: var(--success);
+      color: #ffffff;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+
+    .log-list {
+      max-height: 320px;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .log-time {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin-right: 4px;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      background: #e5e7eb;
+      margin-right: 4px;
+    }
+
+    .flex {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mt-8 { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+
+    /* Status-Bar unten (extra groß) */
+    .status-bar {
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(90deg, #0f172a, #1f2937);
+      color: #e5e7eb;
+      padding: 18px 24px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      z-index: 40;
+      box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.6);
+      min-height: 110px;
+    }
+
+    .status-bar-label {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .status-bar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .status-bar-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .status-bar-badge {
+      border-radius: 999px;
+      padding: 12px 18px;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #111827;
+      border: 1px solid rgba(148,163,184,0.7);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+    }
+
+    .status-bar-badge span.dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      display: inline-block;
+      box-shadow: 0 0 0 2px rgba(15,23,42,0.7);
+    }
+
+    .status-bar-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      background: #020617;
+    }
+
+    .status-bar-badge:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .modal {
+      background: linear-gradient(145deg,#ffffff,#eff6ff);
+      border-radius: 16px;
+      padding: 18px;
+      max-width: 520px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(191, 219, 254, 0.9);
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .app { flex-direction: column; }
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+    }
+
+    @media print {
+      body { background: #ffffff; }
+      .sidebar,
+      .topbar,
+      .btn,
+      .modal-backdrop,
+      .status-bar {
+        display: none !important;
+      }
+      .content { padding: 0; }
+      .card {
+        box-shadow: none;
+        border: none;
+        padding: 8px 0;
+      }
+      .card-header { margin-bottom: 4px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">Einsatz-Dashboard</div>
+    <div id="nav-einsatz" class="nav-item active" onclick="switchView('einsatz')">
+      Einsatz
+    </div>
+    <div id="nav-fahrzeuge" class="nav-item" onclick="switchView('fahrzeuge')">
+      Fahrzeuge
+    </div>
+    <div id="nav-kliniken" class="nav-item" onclick="switchView('kliniken')">
+      Kliniken / PRIOR
+    </div>
+    <div id="nav-logbuch" class="nav-item" onclick="switchView('logbuch')">
+      Logbuch
+    </div>
+    <div id="nav-statistik" class="nav-item" onclick="switchView('statistik')">
+      Statistiken
+    </div>
+    <div class="sidebar-footer">
+      Client-only Demo<br />
+      Daten werden im Browser gespeichert (localStorage).
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Rettungsdienst Einsatzübersicht</div>
+      <div class="topbar-info">
+        <span id="einsatz-running-badge" class="badge" style="display:none">
+          Aktiver Einsatz: <span id="einsatz-running-text"></span>
+        </span>
+        <button class="btn btn-sm" onclick="exportPdf()">Einsatz als PDF exportieren</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Einsatz View -->
+      <div id="view-einsatz">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Einsatzdaten</div>
+                <div class="card-subtitle">Laufenden Einsatz anlegen und bearbeiten</div>
+              </div>
+              <button class="btn btn-sm" onclick="createOrResetEinsatz()">Neuen Einsatz anlegen</button>
+            </div>
+            <form id="einsatz-form" onsubmit="saveEinsatz(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Beginnt am</label>
+                  <input type="text" id="einsatz-start-display" disabled />
+                </div>
+                <div class="form-group">
+                  <label>Einsatzort</label>
+                  <input type="text" id="einsatz-ort" required />
+                </div>
+                <div class="form-group">
+                  <label>Alarmstichwort</label>
+                  <select id="einsatz-stichwort">
+                    <option value="">(frei eingeben)</option>
+                    <option>NA-Rettungsdienst</option>
+                    <option>RD-Notfall</option>
+                    <option>RD-Tragehilfe</option>
+                    <option>MANV</option>
+                  </select>
+                  <input type="text" id="einsatz-stichwort-text" placeholder="oder freier Text" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Erstes Lagebild</label>
+                <textarea id="einsatz-lagebild"></textarea>
+              </div>
+              <div class="checkbox-row">
+                <label><input type="checkbox" id="einsatz-polizei" /> Polizei mitalarmiert</label>
+                <label><input type="checkbox" id="einsatz-feuerwehr" /> Feuerwehr mitalarmiert</label>
+              </div>
+              <div class="flex-between mt-8">
+                <div class="muted" id="einsatz-status-text">Kein Einsatz aktiv.</div>
+                <button type="submit" class="btn btn-sm">Einsatzdaten speichern</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Einsatzlaufzeit</div>
+                <div class="card-subtitle">Live-Timer und ersteintreffende Fahrzeuge</div>
+              </div>
+            </div>
+            <div id="einsatz-timer-box">
+              <div class="muted">Noch kein Einsatz angelegt.</div>
+            </div>
+            <div class="mt-12">
+              <div class="card-subtitle">Ersteintreffende Fahrzeuge</div>
+              <div id="einsatz-ersteintreffend-list" class="mt-8 muted" style="font-size:13px">
+                Noch keine Fahrzeuge am Einsatzort.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Rettungsmittel vor Ort</div>
+              <div class="card-subtitle">Oben Status 3/4, darunter Transporte (7/8)</div>
+            </div>
+          </div>
+          <div class="mt-8">
+            <table>
+              <thead>
+              <tr>
+                <th>Funkrufname</th>
+                <th>Typ</th>
+                <th>Status</th>
+                <th>Standort / Ziel</th>
+                <th>Dauer</th>
+                <th>Patienten</th>
+              </tr>
+              </thead>
+              <tbody id="table-einsatz-fahrzeuge"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Lagemeldungen</div>
+              <div class="card-subtitle">Freitextmeldungen zum Einsatz</div>
+            </div>
+          </div>
+          <form id="lage-form-einsatz" onsubmit="addLagemeldungEinsatz(event)">
+            <div class="flex">
+              <textarea id="lage-text-einsatz" placeholder="Neue Lagemeldung…" style="flex:1;min-height:50px;border-radius:8px;"></textarea>
+              <button type="submit" class="btn btn-sm" style="align-self:flex-end;">Hinzufügen</button>
+            </div>
+          </form>
+          <div id="lage-list-einsatz" class="mt-12 log-list" style="max-height:180px;"></div>
+        </div>
+      </div>
+
+      <!-- Fahrzeuge View -->
+      <div id="view-fahrzeuge" style="display:none">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Fahrzeug anlegen</div>
+                <div class="card-subtitle">Neue Rettungsmittel (starten in Status 2)</div>
+              </div>
+            </div>
+            <form id="fahrzeug-form" onsubmit="addFahrzeug(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Funkrufname</label>
+                  <input type="text" id="fahrzeug-frn" required placeholder="z.B. 01-83-01" />
+                </div>
+                <div class="form-group">
+                  <label>Fahrzeugtyp</label>
+                  <select id="fahrzeug-typ">
+                    <option>RTW</option>
+                    <option>NEF</option>
+                    <option>KTW</option>
+                    <option>GW-SAN</option>
+                  </select>
+                </div>
+              </div>
+              <button class="btn btn-block" type="submit">Fahrzeug anlegen (Status 2)</button>
+            </form>
+
+            <div class="mt-12">
+              <div class="card-subtitle">Standorte verwalten</div>
+              <form id="standort-form" onsubmit="addStandort(event)" class="mt-8">
+                <div class="flex">
+                  <input type="text" id="neuer-standort" placeholder="Neuer Standort…" style="flex:1" />
+                  <button type="submit" class="btn btn-sm">Hinzufügen</button>
+                </div>
+              </form>
+              <div id="standort-liste" class="mt-8" style="font-size:13px"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Statusübersicht</div>
+                <div class="card-subtitle">Aktueller Status und Dauer je Fahrzeug</div>
+              </div>
+            </div>
+            <table>
+              <thead>
+              <tr>
+                <th>Funkrufname</th>
+                <th>Typ</th>
+                <th>Status</th>
+                <th>Seit</th>
+                <th>Dauer</th>
+                <th></th>
+              </tr>
+              </thead>
+              <tbody id="table-fahrzeuge"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Fahrzeug-Details</div>
+              <div class="card-subtitle">Statushistorie des ausgewählten Fahrzeugs</div>
+            </div>
+          </div>
+          <div id="fahrzeug-detail">
+            <div class="muted">Bitte ein Fahrzeug in der Tabelle auswählen.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kliniken View -->
+      <div id="view-kliniken" style="display:none">
+        <div class="grid grid-2-equal">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Klinik anlegen</div>
+                <div class="card-subtitle">Kapazitäten nach Farbe (Rot/Gelb/Grün/Schwarz)</div>
+              </div>
+            </div>
+            <form id="klinik-form" onsubmit="addKlinik(event)">
+              <div class="form-group">
+                <label>Klinikname</label>
+                <input type="text" id="klinik-name" required />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Plätze Rot</label>
+                  <input type="number" id="kap-i" min="0" value="2" />
+                </div>
+                <div class="form-group">
+                  <label>Plätze Gelb</label>
+                  <input type="number" id="kap-ii" min="0" value="4" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Plätze Grün</label>
+                  <input type="number" id="kap-iii" min="0" value="6" />
+                </div>
+                <div class="form-group">
+                  <label>Plätze Schwarz</label>
+                  <input type="number" id="kap-iv" min="0" value="1" />
+                </div>
+              </div>
+              <button class="btn btn-block" type="submit">Klinik hinzufügen</button>
+            </form>
+            <div class="mt-12">
+              <button class="btn btn-secondary btn-sm" onclick="loadDefaultHospitals()">Standard-Kliniken laden/ersetzen</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Klinikübersicht</div>
+                <div class="card-subtitle">Kapazitäten Rot / Gelb / Grün / Schwarz</div>
+              </div>
+            </div>
+            <table>
+              <thead>
+              <tr>
+                <th>Klinik</th>
+                <th>Rot frei</th>
+                <th>Gelb frei</th>
+                <th>Grün frei</th>
+                <th>Schwarz frei</th>
+                <th>Gesamt Pat.</th>
+                <th></th>
+              </tr>
+              </thead>
+              <tbody id="table-kliniken"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logbuch View -->
+      <div id="view-logbuch" style="display:none">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Logbuch / Einsatzprotokoll</div>
+                <div class="card-subtitle">Status- und Freitextmeldungen</div>
+              </div>
+            </div>
+            <div class="log-list" id="log-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Lagemeldung hinzufügen</div>
+                <div class="card-subtitle">Freitext mit Zeitstempel</div>
+              </div>
+            </div>
+            <form id="log-text-form" onsubmit="addFreitextLog(event)">
+              <div class="form-group">
+                <label>Text</label>
+                <textarea id="log-text" required></textarea>
+              </div>
+              <button type="submit" class="btn btn-block">Lagemeldung hinzufügen</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Statistik View -->
+      <div id="view-statistik" style="display:none">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Patientenverteilung Kliniken</div>
+                <div class="card-subtitle">Rot / Gelb / Grün / Schwarz</div>
+              </div>
+            </div>
+            <table>
+              <thead>
+              <tr>
+                <th>Klinik</th>
+                <th>Rot</th>
+                <th>Gelb</th>
+                <th>Grün</th>
+                <th>Schwarz</th>
+                <th>Gesamt</th>
+              </tr>
+              </thead>
+              <tbody id="table-patienten-kliniken"></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Patientenübersicht</div>
+                <div class="card-subtitle">Einfache Patientenliste mit Timern</div>
+              </div>
+            </div>
+            <table>
+              <thead>
+              <tr>
+                <th>ID</th>
+                <th>Kategorie</th>
+                <th>Fahrzeug</th>
+                <th>Klinik</th>
+                <th>Seit</th>
+                <th>Dauer</th>
+              </tr>
+              </thead>
+              <tbody id="table-patienten"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status-Leiste unten -->
+    <div class="status-bar">
+      <div class="status-bar-left">
+        <div class="status-bar-label">
+          Status ändern für: <span id="status-bar-selected" style="font-weight:600;">kein Fahrzeug gewählt</span>
+        </div>
+        <div class="flex" style="gap:10px;align-items:center;">
+          <span style="font-size:13px;">Fahrzeug wählen:</span>
+          <select id="status-bar-fahrzeug-select" style="min-width:180px;border-radius:999px;padding:6px 10px;border:1px solid rgba(148,163,184,0.8);font-size:13px;">
+            <option value="">– auswählen –</option>
+          </select>
+        </div>
+      </div>
+      <div class="status-bar-badges">
+        <div class="status-bar-badge" data-status="1">
+          <span class="dot" style="background:var(--status1)"></span> 1 – Funkbereit
+        </div>
+        <div class="status-bar-badge" data-status="2">
+          <span class="dot" style="background:var(--status2)"></span> 2 – Wache
+        </div>
+        <div class="status-bar-badge" data-status="3">
+          <span class="dot" style="background:var(--status3)"></span> 3 – Anfahrt
+        </div>
+        <div class="status-bar-badge" data-status="4">
+          <span class="dot" style="background:var(--status4)"></span> 4 – Einsatzort
+        </div>
+        <div class="status-bar-badge" data-status="7">
+          <span class="dot" style="background:var(--status7)"></span> 7 – Zielort
+        </div>
+        <div class="status-bar-badge" data-status="8">
+          <span class="dot" style="background:var(--status8)"></span> 8 – Am Ziel
+        </div>
+        <div class="status-bar-badge" data-status="6">
+          <span class="dot" style="background:var(--status6)"></span> 6 – Außer Dienst
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal generic -->
+<div id="modal-backdrop" class="modal-backdrop" onclick="backdropClick(event)">
+  <div class="modal" id="modal" onclick="event.stopPropagation()">
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = "einsatzDashboardState_v1";
+  const STATUS_DEFS = {
+    1: { code: 1, label: "Status 1 – Funkeinsatzbereit", css: "status-1" },
+    2: { code: 2, label: "Status 2 – Einsatzbereit Wache", css: "status-2" },
+    3: { code: 3, label: "Status 3 – Auf Anfahrt", css: "status-3" },
+    4: { code: 4, label: "Status 4 – Am Einsatzort", css: "status-4" },
+    6: { code: 6, label: "Status 6 – Außer Dienst", css: "status-6" },
+    7: { code: 7, label: "Status 7 – Zum Zielort", css: "status-7" },
+    8: { code: 8, label: "Status 8 – Am Zielort", css: "status-8" }
+  };
+
+  // Vordefinierte Standorte
+  let standorte = [
+    { id: 1, name: "Einsatzort Hauptstraße" },
+    { id: 2, name: "Bereitstellungsraum Nord" },
+    { id: 3, name: "Bereitstellungsraum Süd" },
+    { id: 4, name: "Patientenablage 1" },
+    { id: 5, name: "Patientenablage 2" }
+  ];
+
+  function getStandortById(id) {
+    return standorte.find(s => s.id === id) || null;
+  }
+
+  function getStandortName(id) {
+    const s = getStandortById(id);
+    return s ? s.name : "-";
+  }
+
+  let state = loadState();
+  if (state.standorte && state.standorte.length) {
+    standorte = state.standorte;
+  }
+
+  let selectedFahrzeugId = null;
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        return {
+          einsatz: null,
+          fahrzeuge: [],
+          kliniken: [],
+          logs: [],
+          patients: [],
+          transports: [],
+          standorte: [...standorte]
+        };
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed.standorte) parsed.standorte = [...standorte];
+      return parsed;
+    } catch (e) {
+      console.error(e);
+      return {
+        einsatz: null,
+        fahrzeuge: [],
+        kliniken: [],
+        logs: [],
+        patients: [],
+        transports: [],
+        standorte: [...standorte]
+      };
+    }
+  }
+
+  function saveState() {
+    state.standorte = standorte;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function nowIso() { return new Date().toISOString(); }
+  function formatDateTime(dt) { if (!dt) return ""; return new Date(dt).toLocaleString("de-DE"); }
+  function formatTime(dt) { if (!dt) return ""; return new Date(dt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
+  function formatDuration(ms) {
+    if (!ms || ms < 0) ms = 0;
+    const s = Math.floor(ms / 1000);
+    const hh = String(Math.floor(s / 3600)).padStart(2,"0");
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2,"0");
+    const ss = String(s % 60).padStart(2,"0");
+    return hh + ":" + mm + ":" + ss;
+  }
+
+  function deriveTypFromFRN(frn) {
+    if (!frn) return "RTW";
+    const parts = frn.split("-");
+    if (parts.length >= 3) {
+      const middle = parts[1];
+      if (middle === "82") return "NEF";
+      if (middle === "83") return "RTW";
+      if (middle === "86") return "KTW";
+    }
+    return "RTW";
+  }
+
+  function switchView(view) {
+    ["einsatz","fahrzeuge","kliniken","logbuch","statistik"].forEach(v=>{
+      document.getElementById("view-"+v).style.display = v===view ? "" : "none";
+      const nav = document.getElementById("nav-"+v);
+      if (nav) nav.classList.toggle("active", v===view);
+    });
+    const bar = document.querySelector(".status-bar");
+    if (bar) bar.style.display = view === "fahrzeuge" ? "flex" : "none";
+  }
+
+  // Einsatz
+  function createOrResetEinsatz() {
+    state.einsatz = {
+      id: 1,
+      start: nowIso(),
+      ort: "",
+      stichwort: "",
+      lagebild: "",
+      polizei: false,
+      feuerwehr: false,
+      ersteFahrzeugId: null
+    };
+    saveState();
+    populateEinsatzForm();
+    addLog({ type:"system", text:"Neuer Einsatz angelegt", einsatzId:1 });
+    updateAllViews();
+  }
+
+  function populateEinsatzForm() {
+    const e = state.einsatz;
+    const startDisplay = document.getElementById("einsatz-start-display");
+    if (!e) {
+      startDisplay.value="";
+      document.getElementById("einsatz-ort").value="";
+      document.getElementById("einsatz-stichwort").value="";
+      document.getElementById("einsatz-stichwort-text").value="";
+      document.getElementById("einsatz-lagebild").value="";
+      document.getElementById("einsatz-polizei").checked=false;
+      document.getElementById("einsatz-feuerwehr").checked=false;
+      document.getElementById("einsatz-status-text").textContent="Kein Einsatz aktiv.";
+      document.getElementById("einsatz-running-badge").style.display="none";
+      document.getElementById("einsatz-timer-box").innerHTML='<div class="muted">Noch kein Einsatz angelegt.</div>';
+      return;
+    }
+    startDisplay.value = formatDateTime(e.start);
+    document.getElementById("einsatz-ort").value = e.ort || "";
+    document.getElementById("einsatz-lagebild").value = e.lagebild || "";
+    document.getElementById("einsatz-polizei").checked = !!e.polizei;
+    document.getElementById("einsatz-feuerwehr").checked = !!e.feuerwehr;
+    const known = ["NA-Rettungsdienst","RD-Notfall","RD-Tragehilfe","MANV"];
+    if (known.includes(e.stichwort)) {
+      document.getElementById("einsatz-stichwort").value = e.stichwort;
+      document.getElementById("einsatz-stichwort-text").value = "";
+    } else {
+      document.getElementById("einsatz-stichwort").value = "";
+      document.getElementById("einsatz-stichwort-text").value = e.stichwort || "";
+    }
+    document.getElementById("einsatz-status-text").textContent = "Einsatz aktiv seit " + formatDateTime(e.start);
+    document.getElementById("einsatz-running-badge").style.display = "";
+    document.getElementById("einsatz-running-text").textContent = formatDateTime(e.start);
+    updateEinsatzTimer();
+    updateErsteintreffendList();
+  }
+
+  function saveEinsatz(ev) {
+    ev.preventDefault();
+    if (!state.einsatz) {
+      alert("Bitte zuerst „Neuen Einsatz anlegen“ wählen.");
+      return;
+    }
+    const e = state.einsatz;
+    e.ort = document.getElementById("einsatz-ort").value;
+    const sel = document.getElementById("einsatz-stichwort").value;
+    const txt = document.getElementById("einsatz-stichwort-text").value.trim();
+    e.stichwort = txt || sel || "";
+    e.lagebild = document.getElementById("einsatz-lagebild").value;
+    e.polizei = document.getElementById("einsatz-polizei").checked;
+    e.feuerwehr = document.getElementById("einsatz-feuerwehr").checked;
+    saveState();
+    addLog({ type:"system", text:"Einsatzdaten aktualisiert", einsatzId:e.id });
+    populateEinsatzForm();
+    updateAllViews();
+  }
+
+  function updateEinsatzTimer() {
+    const box = document.getElementById("einsatz-timer-box");
+    const badge = document.getElementById("einsatz-running-badge");
+    if (!state.einsatz) {
+      box.innerHTML='<div class="muted">Noch kein Einsatz angelegt.</div>';
+      badge.style.display="none";
+      return;
+    }
+    const start = new Date(state.einsatz.start);
+    const diff = Date.now() - start.getTime();
+    const dur = formatDuration(diff);
+    box.innerHTML =
+      '<div><strong>Einsatz läuft seit</strong> '+dur+'<br/>' +
+      '<span class="muted">Beginn: '+formatDateTime(state.einsatz.start)+'</span></div>';
+    badge.style.display="";
+    document.getElementById("einsatz-running-text").textContent = dur;
+  }
+
+  function updateErsteintreffendList() {
+    const el = document.getElementById("einsatz-ersteintreffend-list");
+    if (!state.einsatz) { el.textContent="Noch kein Einsatz."; return; }
+    const firstId = state.einsatz.ersteFahrzeugId;
+    const firstFhz = state.fahrzeuge.find(f=>f.id===firstId);
+    const allAtScene = state.fahrzeuge.filter(f=>getCurrentStatus(f).code===4);
+    if (!firstFhz && allAtScene.length===0) {
+      el.textContent = "Noch keine Fahrzeuge am Einsatzort.";
+      return;
+    }
+    let html="";
+    if (firstFhz) {
+      html+='<div><span class="badge-first">ersteintreffend</span> '+firstFhz.frn+" ("+firstFhz.typ+")</div>";
+    }
+    const others = allAtScene.filter(f=>!firstFhz || f.id!==firstFhz.id);
+    if (others.length) {
+      html+='<div class="mt-8"><span class="muted">Weitere Fahrzeuge am Einsatzort:</span><br/>';
+      html+=others.map(f=>f.frn+" ("+f.typ+")").join(", ");
+      html+='</div>';
+    }
+    el.innerHTML=html;
+  }
+
+  // Lagemeldungen im Einsatz-Tab
+  function addLagemeldungEinsatz(ev) {
+    ev.preventDefault();
+    const text = document.getElementById("lage-text-einsatz").value.trim();
+    if (!text) return;
+    addLog({ type: "text", text });
+    document.getElementById("lage-text-einsatz").value = "";
+    renderLagemeldungenEinsatz();
+  }
+
+  function renderLagemeldungenEinsatz() {
+    const el = document.getElementById("lage-list-einsatz");
+    if (!el) return;
+    const textLogs = state.logs
+      .filter(l => l.type === "text")
+      .sort((a, b) => new Date(b.time) - new Date(a.time));
+    if (textLogs.length === 0) {
+      el.innerHTML = '<div class="muted">Noch keine Lagemeldungen.</div>';
+      return;
+    }
+    let html = "";
+    textLogs.slice(0, 10).forEach(l => {
+      html += '<div class="log-entry">';
+      html += '<span class="log-time">' + formatTime(l.time) + '</span>';
+      html += '<span>' + l.text + '</span>';
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  }
+
+  // Fahrzeuge
+  function addFahrzeug(ev) {
+    ev.preventDefault();
+    const frn = document.getElementById("fahrzeug-frn").value.trim();
+    if (!frn) return;
+    let typ = document.getElementById("fahrzeug-typ").value;
+    if (!typ) typ = deriveTypFromFRN(frn);
+    const id = Date.now();
+    const now = nowIso();
+    const fahrzeug = {
+      id,
+      frn,
+      typ,
+      currentStatus: 2,
+      currentStatusSince: now,
+      statusHistory: [{ status: 2, from: now, to: null }],
+      currentEinsatzId: null,
+      transportPatients: 0,
+      standortId: null,
+      zielKlinikId: null
+    };
+    state.fahrzeuge.push(fahrzeug);
+    saveState();
+    document.getElementById("fahrzeug-form").reset();
+    addLog({ type: "status", fahrzeugId: id, oldStatus: null, newStatus: 2, text: "Fahrzeug angelegt, Status 2" });
+    updateAllViews();
+  }
+
+  function getCurrentStatus(f){ return STATUS_DEFS[f.currentStatus || 2]; }
+
+  function selectFahrzeug(id) {
+    selectedFahrzeugId = id;
+    const f = state.fahrzeuge.find(x=>x.id===id);
+    const label = document.getElementById("status-bar-selected");
+    if (label) {
+      label.textContent = f ? f.frn+" ("+getCurrentStatus(f).code+")" : "kein Fahrzeug gewählt";
+    }
+    renderFahrzeugDetail(f);
+    highlightSelectedRow(id);
+    renderStatusBarFahrzeugDropdown();
+  }
+
+  function highlightSelectedRow(id) {
+    document.querySelectorAll("#table-fahrzeuge tr").forEach(tr=>{
+      tr.style.backgroundColor = "";
+    });
+    const row = document.querySelector('#table-fahrzeuge tr[data-id="'+id+'"]');
+    if (row) row.style.backgroundColor = "#e0f2fe";
+  }
+
+  function renderFahrzeugDetail(f) {
+    const el = document.getElementById("fahrzeug-detail");
+    if (!f) { el.innerHTML='<div class="muted">Bitte ein Fahrzeug in der Tabelle auswählen.</div>'; return; }
+    let html="";
+    html+='<div class="flex-between">';
+    html+='<div><strong>'+f.frn+"</strong> ("+f.typ+")</div>";
+    html+='<div class="status-pill '+getCurrentStatus(f).css+'">'+getCurrentStatus(f).label+"</div>";
+    html+='</div>';
+    if (f.standortId) {
+      html+='<div class="mt-8 card-subtitle">Standort: '+getStandortName(f.standortId)+'</div>';
+    }
+    if (f.zielKlinikId) {
+      const k = getKlinikById(f.zielKlinikId);
+      if (k) html+='<div class="mt-8 card-subtitle">Zielklinik: '+k.name+'</div>';
+    }
+    html+='<div class="mt-8 card-subtitle">Statusverlauf</div>';
+    html+='<table class="mt-8"><thead><tr><th>Status</th><th>Beginn</th><th>Ende</th><th>Dauer</th></tr></thead><tbody>';
+    f.statusHistory.forEach(s=>{
+      const def = STATUS_DEFS[s.status];
+      const from = new Date(s.from);
+      const to = s.to ? new Date(s.to) : new Date();
+      const dur = formatDuration(to-from);
+      html+="<tr>";
+      html+="<td>"+def.label+"</td>";
+      html+="<td>"+formatDateTime(s.from)+"</td>";
+      html+="<td>"+(s.to?formatDateTime(s.to):"-")+"</td>";
+      html+="<td>"+dur+"</td>";
+      html+="</tr>";
+    });
+    html+="</tbody></table>";
+    el.innerHTML=html;
+  }
+
+  function handleStatusDirectChange(newStatus) {
+    if (!selectedFahrzeugId) {
+      alert("Bitte zuerst ein Fahrzeug in der Fahrzeugübersicht oder im Dropdown auswählen.");
+      return;
+    }
+    const f = state.fahrzeuge.find(x=>x.id===selectedFahrzeugId);
+    if (!f) return;
+    const oldStatus = f.currentStatus;
+
+    if (newStatus === 3) {
+      if (!state.einsatz) {
+        alert("Kein aktueller Einsatz vorhanden. Fahrzeug kann nicht auf Status 3 gesetzt werden.");
+        return;
+      }
+      if (f.currentEinsatzId && f.currentEinsatzId !== state.einsatz.id) {
+        if (!confirm("Fahrzeug ist bereits einem anderen Einsatz zugeordnet – trotzdem wechseln und aktuellen Einsatz übernehmen?")) {
+          return;
+        }
+      }
+      f.currentEinsatzId = state.einsatz.id;
+      openStandortDialog(f.id, newStatus);
+      return;
+    }
+
+    if (newStatus===7) {
+      openTransportDialog(f.id, newStatus);
+      return;
+    }
+
+    applyStatusChange(f,newStatus,oldStatus);
+  }
+
+  function applyStatusChange(f,newStatus,oldStatus) {
+    if (newStatus===oldStatus) return;
+    const now = nowIso();
+    const last = f.statusHistory[f.statusHistory.length-1];
+    if (last && !last.to) last.to = now;
+    f.statusHistory.push({status:newStatus, from:now, to:null});
+    f.currentStatus = newStatus;
+    f.currentStatusSince = now;
+
+    if (newStatus===4 && state.einsatz && !state.einsatz.ersteFahrzeugId) {
+      state.einsatz.ersteFahrzeugId = f.id;
+    }
+    if (newStatus===1 && oldStatus===8) {
+      f.transportPatients=0;
+      f.currentEinsatzId=null;
+      f.standortId=null;
+      f.zielKlinikId=null;
+    }
+
+    saveState();
+    addLog({ type:"status", fahrzeugId:f.id, oldStatus, newStatus, einsatzId:f.currentEinsatzId || null });
+    updateAllViews();
+  }
+
+  function deleteFahrzeug(id) {
+    const f = state.fahrzeuge.find(x=>x.id===id);
+    if (!f) return;
+    if (!confirm("Fahrzeug "+f.frn+" wirklich löschen?")) return;
+    state.fahrzeuge = state.fahrzeuge.filter(x=>x.id!==id);
+    if (selectedFahrzeugId === id) selectedFahrzeugId = null;
+    addLog({ type:"system", text:"Fahrzeug "+f.frn+" gelöscht" });
+    saveState();
+    updateAllViews();
+  }
+
+  // Dropdown in Status-Leiste
+  function renderStatusBarFahrzeugDropdown() {
+    const select = document.getElementById("status-bar-fahrzeug-select");
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">– auswählen –</option>';
+
+    state.fahrzeuge.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = String(f.id);
+      opt.textContent = f.frn + " (" + getCurrentStatus(f).code + ")";
+      if (String(f.id) === currentValue || f.id === selectedFahrzeugId) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+
+    if (selectedFahrzeugId && !state.fahrzeuge.find(f => f.id === selectedFahrzeugId)) {
+      selectedFahrzeugId = null;
+    }
+  }
+
+  function handleStatusBarFahrzeugChange(ev) {
+    const val = ev.target.value;
+    if (!val) {
+      selectedFahrzeugId = null;
+      const label = document.getElementById("status-bar-selected");
+      if (label) label.textContent = "kein Fahrzeug gewählt";
+      return;
+    }
+    const id = parseInt(val, 10);
+    const f = state.fahrzeuge.find(x => x.id === id);
+    if (!f) return;
+    selectedFahrzeugId = id;
+    const label = document.getElementById("status-bar-selected");
+    if (label) label.textContent = f.frn + " (" + getCurrentStatus(f).code + ")";
+    highlightSelectedRow(id);
+  }
+
+  // Standort-Dialog
+  function openStandortDialog(fahrzeugId, targetStatus) {
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (!f) return;
+    const modalContent = document.getElementById("modal-content");
+    let html = "";
+    html += '<div class="modal-title">Standort wählen: ' + f.frn + "</div>";
+    html += '<div class="card-subtitle">Wohin fährt das Fahrzeug? (Status 3 – Anfahrt)</div>';
+
+    html += '<div class="form-group mt-8"><label>Standort / Einsatzort</label><select id="standort-select">';
+    standorte.forEach(s => {
+      html += '<option value="' + s.id + '">' + s.name + '</option>';
+    });
+    html += '</select></div>';
+
+    html += '<div class="modal-footer">';
+    html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
+    html += '<button class="btn btn-sm" onclick="confirmStandort(' + fahrzeugId + ',' + targetStatus + ')">Bestätigen</button>';
+    html += '</div>';
+
+    modalContent.innerHTML = html;
+    document.getElementById("modal-backdrop").style.display = "flex";
+  }
+
+  function confirmStandort(fahrzeugId, targetStatus) {
+    const select = document.getElementById("standort-select");
+    if (!select) return;
+    const standortId = parseInt(select.value, 10);
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (!f) return;
+
+    f.standortId = standortId;
+    f.zielKlinikId = null;
+
+    closeModal();
+    applyStatusChange(f, targetStatus, f.currentStatus);
+  }
+
+  // Transport / Kliniken mit Farben
+  function getKlinikById(id){ if(id==null || isNaN(id)) return null; return state.kliniken.find(k=>k.id===id)||null; }
+
+  function openTransportDialog(fahrzeugId, targetStatus) {
+    if (!state.kliniken.length) {
+      alert("Es sind noch keine Kliniken angelegt. Bitte zuerst unter „Kliniken / PRIOR“ Kliniken hinzufügen.");
+      return;
+    }
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (!f) return;
+    const modalContent = document.getElementById("modal-content");
+    let html = "";
+    html += '<div class="modal-title">Transport planen: ' + f.frn + "</div>";
+    html += '<div class="card-subtitle">Statuswechsel auf „Zum Zielort“ inkl. Klinikzuweisung</div>';
+
+    html += '<div class="form-group mt-8"><label>Klinik</label><select id="transport-klinik">';
+    state.kliniken.forEach(k => {
+      html += '<option value="' + k.id + '">' + k.name + "</option>";
+    });
+    html += "</select></div>";
+
+    html += '<div class="form-group"><label>Sichtungskategorie</label>';
+    html += '<select id="transport-kat" onchange="updateTransportWarnings()">';
+    html += '<option value="rot">Rot (kritisch)</option>';
+    html += '<option value="gelb">Gelb (dringlich)</option>';
+    html += '<option value="gruen">Grün (leicht)</option>';
+    html += '<option value="schwarz">Schwarz</option>';
+    html += "</select></div>";
+
+    html += '<div class="form-group"><label>Anzahl Patienten</label>';
+    html += '<input type="number" id="transport-anzahl" min="1" value="1" /></div>';
+
+    html += '<div id="transport-warning" class="mt-8 muted" style="font-size:13px"></div>';
+
+    html += '<div class="modal-footer">';
+    html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
+    html += '<button class="btn btn-sm" onclick="confirmTransport(' + fahrzeugId + ',' + targetStatus + ')">Bestätigen</button>';
+    html += "</div>";
+
+    modalContent.innerHTML = html;
+    document.getElementById("modal-backdrop").style.display = "flex";
+    updateTransportWarnings();
+  }
+
+  function updateTransportWarnings() {
+    const selectKlinik = document.getElementById("transport-klinik");
+    const selectKat = document.getElementById("transport-kat");
+    if (!selectKlinik || !selectKat) return;
+    const klinikId = parseInt(selectKlinik.value, 10);
+    const k = getKlinikById(klinikId);
+    const kat = selectKat.value;
+    const warnEl = document.getElementById("transport-warning");
+    if (!k) {
+      warnEl.textContent = "Keine Klinik ausgewählt.";
+      return;
+    }
+
+    const keyMap = {
+      rot: "freeRot",
+      gelb: "freeGelb",
+      gruen: "freeGruen",
+      schwarz: "freeSchwarz"
+    };
+    const freeKey = keyMap[kat];
+    const free = k[freeKey] ?? 0;
+
+    const colorMap = {
+      rot: "#ef4444",
+      gelb: "#f59e0b",
+      gruen: "#22c55e",
+      schwarz: "#111827"
+    };
+
+    if (free <= 0) {
+      warnEl.innerHTML = '<span style="color:#dc2626">Warnung: Klinik hat keine freien Plätze in dieser Kategorie.</span>';
+    } else {
+      warnEl.innerHTML = 'Freie Plätze in dieser Kategorie: <span style="color:' + colorMap[kat] + ';font-weight:600;">' + free + "</span>";
+    }
+  }
+
+  function confirmTransport(fahrzeugId, targetStatus) {
+    const klinikSelect = document.getElementById("transport-klinik");
+    if (!klinikSelect || klinikSelect.options.length === 0) {
+      alert("Keine Klinik angelegt.");
+      return;
+    }
+    const klinikId = parseInt(klinikSelect.value, 10);
+    const kat = document.getElementById("transport-kat").value;
+    const anzahl = parseInt(document.getElementById("transport-anzahl").value, 10) || 1;
+    const klinik = getKlinikById(klinikId);
+    if (!klinik) {
+      alert("Bitte eine gültige Klinik auswählen.");
+      return;
+    }
+
+    const capKeyMap = {
+      rot: "capRot",
+      gelb: "capGelb",
+      gruen: "capGruen",
+      schwarz: "capSchwarz"
+    };
+    const freeKeyMap = {
+      rot: "freeRot",
+      gelb: "freeGelb",
+      gruen: "freeGruen",
+      schwarz: "freeSchwarz"
+    };
+
+    const capKey = capKeyMap[kat];
+    const freeKey = freeKeyMap[kat];
+    klinik[freeKey] = (klinik[freeKey] ?? klinik[capKey] ?? 0) - anzahl;
+
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (f) f.transportPatients = (f.transportPatients || 0) + anzahl;
+
+    const transportId = Date.now();
+    state.transports.push({
+      id: transportId,
+      fahrzeugId,
+      klinikId,
+      kat,
+      anzahl,
+      time: nowIso()
+    });
+
+    for (let i = 0; i < anzahl; i++) {
+      state.patients.push({
+        id: transportId + "-" + (i + 1),
+        kat,
+        fahrzeugId,
+        klinikId,
+        start: nowIso()
+      });
+    }
+
+    const fTarget = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (fTarget) {
+      fTarget.zielKlinikId = klinikId;
+      fTarget.standortId = null;
+    }
+
+    saveState();
+    addLog({ type: "transport", fahrzeugId, klinikId, kat, anzahl, text: "Transport zu Klinik" });
+    closeModal();
+
+    const f2 = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (f2) applyStatusChange(f2, targetStatus, f2.currentStatus);
+  }
+
+  function closeModal() {
+    document.getElementById("modal-backdrop").style.display="none";
+    document.getElementById("modal-content").innerHTML="";
+  }
+  function backdropClick(){ closeModal(); }
+
+  // Kliniken
+  function loadDefaultHospitals() {
+    if (!confirm("Vorhandene Kliniken durch eine Standardliste (Region Bremen, Beispiel) ersetzen?")) return;
+    const defaults = [
+      "Klinikum Bremen-Mitte","Klinikum Links der Weser","Klinikum Bremen-Nord",
+      "Klinikum Bremen-Ost","Rotes Kreuz Krankenhaus Bremen",
+      "St. Joseph-Stift Bremen","AMEOS Klinikum Seepark Geestland"
+    ];
+    state.kliniken = defaults.map((name,idx)=>{
+      const capRot=4, capGelb=8, capGruen=10, capSchwarz=2;
+      return { id:Date.now()+idx, name,
+        capRot,capGelb,capGruen,capSchwarz,
+        freeRot:capRot, freeGelb:capGelb, freeGruen:capGruen, freeSchwarz:capSchwarz };
+    });
+    saveState();
+    updateAllViews();
+  }
+
+  function addKlinik(ev) {
+    ev.preventDefault();
+    const name = document.getElementById("klinik-name").value.trim();
+    if (!name) return;
+
+    const capRot = parseInt(document.getElementById("kap-i").value, 10) || 0;
+    const capGelb = parseInt(document.getElementById("kap-ii").value, 10) || 0;
+    const capGruen = parseInt(document.getElementById("kap-iii").value, 10) || 0;
+    const capSchwarz = parseInt(document.getElementById("kap-iv").value, 10) || 0;
+
+    const id = Date.now();
+    const klinik = {
+      id,
+      name,
+      capRot,
+      capGelb,
+      capGruen,
+      capSchwarz,
+      freeRot: capRot,
+      freeGelb: capGelb,
+      freeGruen: capGruen,
+      freeSchwarz: capSchwarz
+    };
+    state.kliniken.push(klinik);
+    saveState();
+    document.getElementById("klinik-form").reset();
+    updateAllViews();
+  }
+
+  function deleteKlinik(id) {
+    const k = state.kliniken.find(x => x.id === id);
+    if (!k) return;
+    if (!confirm("Klinik „" + k.name + "“ wirklich löschen?")) return;
+    state.kliniken = state.kliniken.filter(x => x.id !== id);
+    saveState();
+    updateAllViews();
+  }
+
+  function openKlinikZuweisungDialog(klinikId) {
+    const k = getKlinikById(klinikId);
+    if (!k) return;
+
+    const verfuegbar = state.fahrzeuge.filter(f => f.currentStatus === 4);
+
+    const modalContent = document.getElementById("modal-content");
+    let html = "";
+    html += '<div class="modal-title">Patient zu Klinik zuweisen</div>';
+    html += '<div class="card-subtitle">Klinik: <strong>' + k.name + '</strong></div>';
+
+    if (verfuegbar.length === 0) {
+      html += '<div class="mt-12 muted">Keine Fahrzeuge im Status 4 (am Einsatzort) verfügbar.</div>';
+      html += '<div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="closeModal()">Schließen</button></div>';
+      modalContent.innerHTML = html;
+      document.getElementById("modal-backdrop").style.display = "flex";
+      return;
+    }
+
+    html += '<div class="form-group mt-8"><label>Fahrzeug</label><select id="klinik-fahrzeug">';
+    verfuegbar.forEach(f => {
+      html += '<option value="' + f.id + '">' + f.frn + ' (' + f.typ + ')</option>';
+    });
+    html += '</select></div>';
+
+    html += '<div class="form-group"><label>Sichtungskategorie</label>';
+    html += '<select id="klinik-kat">';
+    html += '<option value="rot">Rot (kritisch)</option>';
+    html += '<option value="gelb">Gelb (dringlich)</option>';
+    html += '<option value="gruen">Grün (leicht)</option>';
+    html += '<option value="schwarz">Schwarz</option>';
+    html += '</select></div>';
+
+    html += '<div class="form-group"><label>Anzahl Patienten</label>';
+    html += '<input type="number" id="klinik-anzahl" min="1" value="1" /></div>';
+
+    html += '<div class="modal-footer">';
+    html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
+    html += '<button class="btn btn-sm" onclick="confirmKlinikZuweisung(' + klinikId + ')">Transport starten</button>';
+    html += '</div>';
+
+    modalContent.innerHTML = html;
+    document.getElementById("modal-backdrop").style.display = "flex";
+  }
+
+  function confirmKlinikZuweisung(klinikId) {
+    const fahrzeugId = parseInt(document.getElementById("klinik-fahrzeug").value, 10);
+    const kat = document.getElementById("klinik-kat").value;
+    const anzahl = parseInt(document.getElementById("klinik-anzahl").value, 10) || 1;
+
+    const klinik = getKlinikById(klinikId);
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (!klinik || !f) {
+      alert("Ungültige Auswahl.");
+      return;
+    }
+
+    const freeKeyMap = {
+      rot: "freeRot",
+      gelb: "freeGelb",
+      gruen: "freeGruen",
+      schwarz: "freeSchwarz"
+    };
+    const capKeyMap = {
+      rot: "capRot",
+      gelb: "capGelb",
+      gruen: "capGruen",
+      schwarz: "capSchwarz"
+    };
+
+    const freeKey = freeKeyMap[kat];
+    const capKey = capKeyMap[kat];
+    klinik[freeKey] = (klinik[freeKey] ?? klinik[capKey] ?? 0) - anzahl;
+
+    f.transportPatients = (f.transportPatients || 0) + anzahl;
+    f.zielKlinikId = klinikId;
+    f.standortId = null;
+
+    const transportId = Date.now();
+    state.transports.push({
+      id: transportId,
+      fahrzeugId,
+      klinikId,
+      kat,
+      anzahl,
+      time: nowIso()
+    });
+
+    for (let i = 0; i < anzahl; i++) {
+      state.patients.push({
+        id: transportId + "-" + (i + 1),
+        kat,
+        fahrzeugId,
+        klinikId,
+        start: nowIso()
+      });
+    }
+
+    saveState();
+    addLog({ type: "transport", fahrzeugId, klinikId, kat, anzahl, text: "Transport zu Klinik (über Klinik-Zuweisung)" });
+    closeModal();
+
+    applyStatusChange(f, 7, f.currentStatus);
+  }
+
+  // Standorte
+  function addStandort(ev) {
+    ev.preventDefault();
+    const input = document.getElementById("neuer-standort");
+    const name = input.value.trim();
+    if (!name) return;
+    const id = Date.now();
+    standorte.push({ id, name });
+    state.standorte = standorte;
+    saveState();
+    input.value = "";
+    renderStandortListe();
+  }
+
+  function deleteStandort(id) {
+    if (!confirm("Standort wirklich löschen?")) return;
+    standorte = standorte.filter(s => s.id !== id);
+    state.standorte = standorte;
+    saveState();
+    renderStandortListe();
+  }
+
+  function renderStandortListe() {
+    const el = document.getElementById("standort-liste");
+    if (!el) return;
+    if (standorte.length === 0) {
+      el.innerHTML = '<span class="muted">Keine Standorte definiert.</span>';
+      return;
+    }
+    let html = "<ul style='margin:0;padding-left:18px;'>";
+    standorte.forEach(s => {
+      html += '<li>' + s.name + ' <button class="btn btn-sm btn-danger" style="padding:2px 6px;font-size:11px;" onclick="deleteStandort(' + s.id + ')">×</button></li>';
+    });
+    html += "</ul>";
+    el.innerHTML = html;
+  }
+
+  // Logbuch
+  function addLog(entry) {
+    const enriched = Object.assign({ id:Date.now(), time:nowIso() }, entry);
+    state.logs.push(enriched);
+    saveState();
+    renderLog();
+  }
+
+  function addFreitextLog(ev) {
+    ev.preventDefault();
+    const text = document.getElementById("log-text").value.trim();
+    if (!text) return;
+    addLog({ type:"text", text });
+    document.getElementById("log-text-form").reset();
+  }
+
+  function renderLog() {
+    const list = document.getElementById("log-list");
+    const logs = [...state.logs].sort((a,b)=>new Date(a.time)-new Date(b.time));
+    list.innerHTML="";
+    logs.forEach(l=>{
+      const div=document.createElement("div");
+      div.className="log-entry";
+      let line='<span class="log-time">'+formatTime(l.time)+'</span>';
+      if (l.type==="status") {
+        const f = state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
+        const old = l.oldStatus ? STATUS_DEFS[l.oldStatus] : null;
+        const neu = STATUS_DEFS[l.newStatus];
+        if (f) line+='<span class="pill">'+f.frn+'</span>';
+        line+='<span class="pill">Status '+(old?old.code:"-")+" → "+neu.code+"</span>";
+        if (l.einsatzId) line+='<span class="pill">Einsatz #'+l.einsatzId+"</span>";
+      } else if (l.type==="transport") {
+        const f = state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
+        const k = state.kliniken.find(x=>x.id===l.klinikId);
+        if (f) line+='<span class="pill">'+f.frn+'</span>';
+        if (k) line+='<span class="pill">'+k.name+'</span>';
+        line+='<span class="pill">'+l.kat+'</span>';
+        line+="<span>"+l.anzahl+" Patient(en) transportiert</span>";
+      } else if (l.type==="text") {
+        line+="<span>"+l.text+"</span>";
+      } else if (l.type==="system") {
+        line+='<span class="pill">System</span><span>'+l.text+"</span>";
+      }
+      div.innerHTML=line;
+      list.appendChild(div);
+    });
+  }
+
+  // Kliniken / Statistik
+  function countPatientsPerClinic(klinikId) {
+    const stats = { rot: 0, gelb: 0, gruen: 0, schwarz: 0 };
+    state.transports.forEach(t => {
+      if (t.klinikId === klinikId && stats[t.kat] != null) {
+        stats[t.kat] += t.anzahl;
+      }
+    });
+    return stats;
+  }
+
+  function renderKliniken() {
+    const tbody = document.getElementById("table-kliniken");
+    tbody.innerHTML = "";
+    state.kliniken.forEach(k => {
+      const s = countPatientsPerClinic(k.id);
+      const total = s.rot + s.gelb + s.gruen + s.schwarz;
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.title = "Klicken für Patientenzuweisung";
+      tr.innerHTML =
+        "<td><strong>" + k.name + "</strong></td>" +
+        '<td style="color:#ef4444;font-weight:600;">' + (k.freeRot ?? k.capRot ?? 0) + "</td>" +
+        '<td style="color:#f59e0b;font-weight:600;">' + (k.freeGelb ?? k.capGelb ?? 0) + "</td>" +
+        '<td style="color:#22c55e;font-weight:600;">' + (k.freeGruen ?? k.capGruen ?? 0) + "</td>" +
+        '<td style="color:#111827;font-weight:600;">' + (k.freeSchwarz ?? k.capSchwarz ?? 0) + "</td>" +
+        "<td>" + total + "</td>" +
+        '<td class="text-right"><button class="btn btn-sm btn-danger" onclick="deleteKlinik(' + k.id + '); event.stopPropagation();">×</button></td>';
+      tr.addEventListener("click", () => openKlinikZuweisungDialog(k.id));
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderPatientenStatistik() {
+    const tbody = document.getElementById("table-patienten-kliniken");
+    tbody.innerHTML = "";
+    state.kliniken.forEach(k => {
+      const s = countPatientsPerClinic(k.id);
+      const total = s.rot + s.gelb + s.gruen + s.schwarz;
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + k.name + "</td>" +
+        '<td style="color:#ef4444;font-weight:600;">' + s.rot + "</td>" +
+        '<td style="color:#f59e0b;font-weight:600;">' + s.gelb + "</td>" +
+        '<td style="color:#22c55e;font-weight:600;">' + s.gruen + "</td>" +
+        '<td style="color:#111827;font-weight:600;">' + s.schwarz + "</td>" +
+        "<td>" + total + "</td>";
+      tbody.appendChild(tr);
+    });
+
+    const tbodyP = document.getElementById("table-patienten");
+    tbodyP.innerHTML = "";
+    const colorMap = {
+      rot: "#ef4444",
+      gelb: "#f59e0b",
+      gruen: "#22c55e",
+      schwarz: "#111827"
+    };
+    state.patients.forEach(p => {
+      const f = state.fahrzeuge.find(x => x.id === p.fahrzeugId);
+      const k = state.kliniken.find(x => x.id === p.klinikId);
+      const start = new Date(p.start);
+      const dur = formatDuration(Date.now() - start.getTime());
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + p.id + "</td>" +
+        '<td style="color:' + (colorMap[p.kat] || "#000") + ';font-weight:600;">' + p.kat + "</td>" +
+        "<td>" + (f ? f.frn : "-") + "</td>" +
+        "<td>" + (k ? k.name : "-") + "</td>" +
+        "<td>" + formatDateTime(p.start) + "</td>" +
+        "<td>" + dur + "</td>";
+      tbodyP.appendChild(tr);
+    });
+  }
+
+  // Tabellen + Filter für „Rettungsmittel vor Ort“
+  function renderFahrzeugeTables() {
+    const tbody = document.getElementById("table-fahrzeuge");
+    const tbodyEinsatz = document.getElementById("table-einsatz-fahrzeuge");
+    tbody.innerHTML="";
+    tbodyEinsatz.innerHTML="";
+
+    const oben = [];
+    const unten = [];
+
+    state.fahrzeuge.forEach(f=>{
+      const status = getCurrentStatus(f);
+      const since = new Date(f.currentStatusSince || nowIso());
+      const durMs = Date.now() - since.getTime();
+
+      const tr = document.createElement("tr");
+      tr.dataset.id = f.id;
+      tr.innerHTML =
+        "<td>"+f.frn+"</td>"+
+        "<td>"+f.typ+"</td>"+
+        '<td><span class="status-pill '+status.css+'">'+status.label+"</span></td>"+
+        "<td>"+formatDateTime(f.currentStatusSince)+"</td>"+
+        "<td>"+formatDuration(durMs)+"</td>"+
+        '<td class="text-right"><button class="btn btn-sm btn-danger" onclick="deleteFahrzeug('+f.id+'); event.stopPropagation();">Löschen</button></td>';
+      tr.addEventListener("click",()=>selectFahrzeug(f.id));
+      tbody.appendChild(tr);
+
+      if (status.code===3 || status.code===4) oben.push({f,status,durMs});
+      if (status.code===7 || status.code===8) unten.push({f,status,durMs});
+    });
+
+    if (oben.length===0 && unten.length===0) {
+      tbodyEinsatz.innerHTML='<tr><td colspan="6" class="muted">Noch keine relevanten Fahrzeuge.</td></tr>';
+    } else {
+      oben.forEach(({f,status,durMs})=>{
+        const ort = f.standortId ? getStandortName(f.standortId) : "-";
+        const tr=document.createElement("tr");
+        tr.innerHTML=
+          "<td>"+f.frn+"</td>"+
+          "<td>"+f.typ+"</td>"+
+          '<td><span class="status-pill '+status.css+'">'+status.code+"</span></td>"+
+          "<td>"+ort+"</td>"+
+          "<td>"+formatDuration(durMs)+"</td>"+
+          "<td>"+(f.transportPatients||0)+"</td>";
+        tbodyEinsatz.appendChild(tr);
+      });
+      if (unten.length>0) {
+        const trSep=document.createElement("tr");
+        trSep.innerHTML='<td colspan="6" class="muted" style="background:#f3f4f6;font-size:12px;">Transporte (Status 7/8)</td>';
+        tbodyEinsatz.appendChild(trSep);
+        unten.forEach(({f,status,durMs})=>{
+          const ziel = f.zielKlinikId ? (getKlinikById(f.zielKlinikId)?.name || "-") : "-";
+          const tr=document.createElement("tr");
+          tr.innerHTML=
+            "<td>"+f.frn+"</td>"+
+            "<td>"+f.typ+"</td>"+
+            '<td><span class="status-pill '+status.css+'">'+status.code+"</span></td>"+
+            "<td>"+ziel+"</td>"+
+            "<td>"+formatDuration(durMs)+"</td>"+
+            "<td>"+(f.transportPatients||0)+"</td>";
+          tbodyEinsatz.appendChild(tr);
+        });
+      }
+    }
+  }
+
+  // PDF Export
+  function exportPdf() {
+    if (!state.einsatz) {
+      alert("Es ist kein Einsatz angelegt – PDF wäre leer.");
+      return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y=10, lineHeight=6;
+    function addLine(text){ doc.text(text,10,y); y+=lineHeight; if (y>280){doc.addPage(); y=10;} }
+
+    addLine("Einsatzbericht Rettungsdienst");
+    addLine("---------------------------");
+    addLine("");
+    addLine("Einsatzdaten");
+    addLine("Beginn: "+formatDateTime(state.einsatz.start));
+    addLine("Ort: "+(state.einsatz.ort||"-"));
+    addLine("Alarmstichwort: "+(state.einsatz.stichwort||"-"));
+    addLine("Lagebild: "+(state.einsatz.lagebild||"-"));
+    addLine("Polizei: "+(state.einsatz.polizei?"ja":"nein")+", Feuerwehr: "+(state.einsatz.feuerwehr?"ja":"nein"));
+    addLine("");
+
+    addLine("Fahrzeuge");
+    state.fahrzeuge.forEach(f=>{
+      addLine(" - "+f.frn+" ("+f.typ+")");
+      if (state.einsatz && state.einsatz.ersteFahrzeugId===f.id) addLine("   * ersteintreffend");
+      if (f.standortId) addLine("   Standort: "+getStandortName(f.standortId));
+      if (f.zielKlinikId) {
+        const k = getKlinikById(f.zielKlinikId);
+        if (k) addLine("   Zielklinik: "+k.name);
+      }
+      f.statusHistory.forEach(s=>{
+        const def=STATUS_DEFS[s.status];
+        const from=formatDateTime(s.from);
+        const to=s.to?formatDateTime(s.to):"-";
+        const dur=formatDuration((s.to?new Date(s.to):new Date())-new Date(s.from));
+        addLine("   "+def.code+" "+def.label+" | "+from+" → "+to+" ("+dur+")");
+      });
+    });
+    addLine("");
+
+    addLine("Kliniktransporte");
+    state.transports.forEach(t=>{
+      const f=state.fahrzeuge.find(x=>x.id===t.fahrzeugId);
+      const k=state.kliniken.find(x=>x.id===t.klinikId);
+      addLine("- "+formatDateTime(t.time)+": "+(f?f.frn:"?")+" → "+(k?k.name:"?")+", "+t.kat+", "+t.anzahl+" Pat.");
+    });
+    addLine("");
+
+    addLine("Patientenverteilung je Klinik");
+    state.kliniken.forEach(k=>{
+      const s=countPatientsPerClinic(k.id);
+      const total=s.rot+s.gelb+s.gruen+s.schwarz;
+      addLine(
+        k.name+
+        ": Rot="+s.rot+
+        ", Gelb="+s.gelb+
+        ", Grün="+s.gruen+
+        ", Schwarz="+s.schwarz+
+        ", gesamt="+total
+      );
+    });
+    addLine("");
+
+    addLine("Vollständiges Logbuch");
+    const logs=[...state.logs].sort((a,b)=>new Date(a.time)-new Date(b.time));
+    logs.forEach(l=>{
+      let line=formatDateTime(l.time)+" ";
+      if (l.type==="status") {
+        const f=state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
+        const old=l.oldStatus?STATUS_DEFS[l.oldStatus]:null;
+        const neu=STATUS_DEFS[l.newStatus];
+        line+=(f?f.frn:"?")+" Status "+(old?old.code:"-")+" → "+neu.code;
+      } else if (l.type==="transport") {
+        const f=state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
+        const k=state.kliniken.find(x=>x.id===l.klinikId);
+        line+=(f?f.frn:"?")+" Transport zu "+(k?k.name:"?")+" "+l.kat+" ("+l.anzahl+" Pat.)";
+      } else if (l.type==="text") {
+        line+="TEXT: "+l.text;
+      } else if (l.type==="system") {
+        line+="SYSTEM: "+l.text;
+      }
+      addLine(line);
+    });
+
+    doc.save("einsatzbericht.pdf");
+  }
+
+  function tickTimers(){
+    updateEinsatzTimer();
+    renderFahrzeugeTables();
+    renderPatientenStatistik();
+  }
+
+  function updateAllViews(){
+    populateEinsatzForm();
+    renderFahrzeugeTables();
+    renderKliniken();
+    renderPatientenStatistik();
+    renderLog();
+    renderStandortListe();
+    renderLagemeldungenEinsatz();
+    renderStatusBarFahrzeugDropdown();
+  }
+
+  document.querySelectorAll(".status-bar-badge").forEach(badge=>{
+    badge.addEventListener("click",()=>{
+      const s=parseInt(badge.dataset.status,10);
+      handleStatusDirectChange(s);
+    });
+  });
+
+  const statusBarSelect = document.getElementById("status-bar-fahrzeug-select");
+  if (statusBarSelect) {
+    statusBarSelect.addEventListener("change", handleStatusBarFahrzeugChange);
+  }
+
+  updateAllViews();
+  setInterval(tickTimers,1000);
+</script>
+</body>
+</html>
