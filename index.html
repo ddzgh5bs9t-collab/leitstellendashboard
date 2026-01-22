@@ -1366,7 +1366,12 @@
     closeModal();
     applyStatusChange(f, targetStatus, f.currentStatus);
   }
-
+function closeModal() {
+  const backdrop = document.getElementById("modal-backdrop");
+  if (backdrop) {
+    backdrop.style.display = "none";
+  }
+}
   // Transport / Kliniken mit Farben
   function getKlinikById(id){ if(id==null || isNaN(id)) return null; return state.kliniken.find(k=>k.id===id)||null; }
 
