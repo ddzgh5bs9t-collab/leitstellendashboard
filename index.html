@@ -5,6 +5,8 @@
   <title>Leitstellendashboard MANV</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <style>
     :root {
       --bg: #eef2ff;
@@ -127,6 +129,7 @@
       display: flex;
       flex-direction: column;
       gap: 18px;
+      overflow-y: auto;
     }
 
     .card {
@@ -478,6 +481,44 @@
       }
       .card-header { margin-bottom: 4px; }
     }
+
+    /* Lagekarte Styles */
+    #lagekarte-container {
+      height: 500px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 18px;
+      overflow: hidden;
+    }
+
+    .krankenhaeuser-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .krankenhaus-item {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .krankenhaus-item:hover {
+      background: #f0f0f0;
+    }
+
+    .krankenhaus-item-name {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .krankenhaus-item-distance {
+      font-size: 12px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -500,8 +541,11 @@
     <div id="nav-statistik" class="nav-item" onclick="switchView('statistik')">
       Gesamtübersicht
     </div>
+    <div id="nav-lagekarte" class="nav-item" onclick="switchView('lagekarte')">
+      Lagekarte
+    </div>
     <div class="sidebar-footer">
-      Client-only Demo<br />
+      Erstellt von Finley Schoon, NFS04 / 2025<br />
       Daten werden im Browser gespeichert (localStorage).
     </div>
   </div>
@@ -514,7 +558,7 @@
         <span id="einsatz-running-badge" class="badge" style="display:none">
           Aktiver Einsatz: <span id="einsatz-running-text"></span>
         </span>
-        <button class="btn btn-sm" onclick="exportPdf()">Einsatz als PDF exportieren</button>
+        <button class="btn btn-sm" onclick="exportToPDF()">Einsatz als PDF exportieren</button>
       </div>
     </div>
 
@@ -755,6 +799,7 @@
             </form>
             <div class="mt-12">
               <button class="btn btn-secondary btn-sm" onclick="loadDefaultHospitals()">Standard-Kliniken laden/ersetzen</button>
+              <button class="btn btn-secondary btn-sm" style="margin-top:8px;width:100%;" onclick="loadNearestHospitalsFromMap()">10 Nächste Kliniken (Lagekarte)</button>
             </div>
           </div>
 
@@ -886,6 +931,50 @@
           </div>
         </div>
       </div>
+
+      <!-- Lagekarte View -->
+      <div id="view-lagekarte" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Lagekarte</div>
+              <div class="card-subtitle">Einsatzort und Krankenhäuser auf der Karte</div>
+            </div>
+          </div>
+          <div class="form-group mt-8">
+            <label>Adresse eingeben</label>
+            <div class="flex">
+              <input type="text" id="lagekarte-adresse" placeholder="z.B. Bremen, Hauptstraße 10" style="flex:1" />
+              <button type="button" class="btn btn-sm" onclick="searchAddress()">Suchen</button>
+            </div>
+          </div>
+          <div id="lagekarte-container"></div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Einsatzort</div>
+                <div class="card-subtitle">Adresse und Koordinaten</div>
+              </div>
+            </div>
+            <div id="lagekarte-info" class="muted">Bitte eine Adresse eingeben und suchen.</div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Nächste Krankenhäuser</div>
+                <div class="card-subtitle">Nach Entfernung sortiert</div>
+              </div>
+            </div>
+            <div class="krankenhaeuser-list" id="krankenhaeuser-list" style="font-size:13px">
+              <div class="muted">Keine Krankenhäuser verfügbar.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Status-Leiste unten -->
@@ -969,6 +1058,9 @@
   if (state.standorte && state.standorte.length) {
     standorte = state.standorte;
   }
+  if (!state.kliniken || state.kliniken.length === 0) {
+    loadDefaultHospitals();
+  }
 
   let selectedFahrzeugId = null;
 
@@ -1008,6 +1100,13 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  function addLog(entry) {
+    const enriched = Object.assign({ id:Date.now(), time:nowIso() }, entry);
+    state.logs.push(enriched);
+    saveState();
+    renderLog();
+  }
+
   function nowIso() { return new Date().toISOString(); }
   function formatDateTime(dt) { if (!dt) return ""; return new Date(dt).toLocaleString("de-DE"); }
   function formatTime(dt) { if (!dt) return ""; return new Date(dt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
@@ -1033,13 +1132,20 @@
   }
 
   function switchView(view) {
-    ["einsatz","fahrzeuge","kliniken","logbuch","statistik"].forEach(v=>{
+    ["einsatz","fahrzeuge","kliniken","logbuch","statistik","lagekarte"].forEach(v=>{
       document.getElementById("view-"+v).style.display = v===view ? "" : "none";
       const nav = document.getElementById("nav-"+v);
       if (nav) nav.classList.toggle("active", v===view);
     });
     const bar = document.querySelector(".status-bar");
     if (bar) bar.style.display = view === "fahrzeuge" ? "flex" : "none";
+    
+    // Wenn Lagekarte angezeigt wird, initalisiere die Karte
+    if (view === "lagekarte") {
+      setTimeout(() => {
+        initializeMap();
+      }, 100);
+    }
   }
 
   // Einsatz
@@ -1099,7 +1205,7 @@
   function saveEinsatz(ev) {
     ev.preventDefault();
     if (!state.einsatz) {
-      alert("Bitte zuerst „Neuen Einsatz anlegen“ wählen.");
+      alert("Bitte zuerst 'Neuen Einsatz anlegen' wählen.");
       return;
     }
     const e = state.einsatz;
@@ -1337,78 +1443,85 @@
     updateAllViews();
   }
 
-  // Funkrufnamen nachträglich ändern
-  function updateFahrzeugFRN(fahrzeugId, value) {
-    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
-    if (!f) return;
-    const frn = value.trim();
-    if (!frn) return;
-    f.frn = frn;
-    saveState();
-    renderFahrzeugeTables();
-    if (selectedFahrzeugId === fahrzeugId) {
-      renderFahrzeugDetail(f);
-      const label = document.getElementById("status-bar-selected");
-      if (label) label.textContent = f.frn + " (" + getCurrentStatus(f).code + ")";
-      renderStatusBarFahrzeugDropdown();
-    }
-  }
   // Standort-Dialog
   function openStandortDialog(fahrzeugId, targetStatus) {
-  const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
-  if (!f) return;
-
-  const modalContent = document.getElementById("modal-content");
-  let html = "";
-
-  html += '<div class="modal-title">Standort wählen – ' + f.frn + '</div>';
-  html += '<div class="card-subtitle">Wohin fährt das Fahrzeug? Status 3: Anfahrt</div>';
-
-  html += '<div class="form-group mt-8">';
-  html += '<label>Standort / Einsatzort</label>';
-  html += '<select id="standort-select">';
-  standorte.forEach(s => {
-    html += '<option value="' + s.id + '">' + s.name + '</option>';
-  });
-  html += '</select>';
-  html += '</div>';
-
-  html += '<div class="modal-footer">';
-  html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
-  html += '<button class="btn btn-sm" onclick="confirmStandort(' + fahrzeugId + ', ' + targetStatus + ')">Bestätigen</button>';
-  html += '</div>';
-
-  modalContent.innerHTML = html;
-  document.getElementById("modal-backdrop").style.display = "flex";
-}
-  function confirmStandort(fahrzeugId, targetStatus) {
-    const select = document.getElementById("standort-select");
-    if (!select) return;
-    const standortId = parseInt(select.value, 10);
     const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
     if (!f) return;
 
+    const modalContent = document.getElementById("modal-content");
+    let html = "";
+
+    html += '<div class="modal-title">Standort wählen – ' + f.frn + '</div>';
+    html += '<div class="card-subtitle">Wohin fährt das Fahrzeug? Status 3: Anfahrt</div>';
+
+    html += '<div class="form-group mt-8">';
+    html += '<label>Standort / Einsatzort</label>';
+    html += '<select id="standort-select">';
+    standorte.forEach(s => {
+      html += '<option value="' + s.id + '">' + s.name + '</option>';
+    });
+    html += '</select>';
+    html += '</div>';
+
+    html += '<div class="modal-footer">';
+    html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
+    html += '<button class="btn btn-sm" onclick="confirmStandort(' + fahrzeugId + ', ' + targetStatus + ')">Bestätigen</button>';
+    html += '</div>';
+
+    modalContent.innerHTML = html;
+    document.getElementById("modal-backdrop").style.display = "flex";
+  }
+
+  function confirmStandort(fahrzeugId, targetStatus) {
+    const select = document.getElementById("standort-select");
+    if (!select) {
+      closeModal();
+      return;
+    }
+
+    const standortId = parseInt(select.value, 10);
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (!f) {
+      closeModal();
+      return;
+    }
+
+    // Standort setzen, Zielklinik zurücksetzen
     f.standortId = standortId;
     f.zielKlinikId = null;
 
+    saveState();
+    addLog({
+      type: "status",
+      fahrzeugId: f.id,
+      oldStatus: f.currentStatus,
+      newStatus: targetStatus,
+      text: "Standort gesetzt: " + getStandortName(standortId)
+    });
+
+    // Modal schließen
     closeModal();
+
+    // Statuswechsel durchführen
     applyStatusChange(f, targetStatus, f.currentStatus);
   }
-function closeModal() {
-  const backdrop = document.getElementById("modal-backdrop");
-  if (backdrop) {
-    backdrop.style.display = "none";
-  }
-}
 
-function backdropClick(event) {
-  closeModal();
-}
+  function closeModal() {
+    const backdrop = document.getElementById("modal-backdrop");
+    if (backdrop) {
+      backdrop.style.display = "none";
+    }
+  }
+
+  function backdropClick(event) {
+    closeModal();
+  }
+
   function getKlinikById(id){ if(id==null || isNaN(id)) return null; return state.kliniken.find(k=>k.id===id)||null; }
 
   function openTransportDialog(fahrzeugId, targetStatus) {
     if (!state.kliniken.length) {
-      alert("Es sind noch keine Kliniken angelegt. Bitte zuerst unter „Kliniken / PRIOR“ Kliniken hinzufügen.");
+      alert("Es sind noch keine Kliniken angelegt. Bitte zuerst unter 'Kliniken / PRIOR' Kliniken hinzufügen.");
       return;
     }
     const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
@@ -1416,7 +1529,7 @@ function backdropClick(event) {
     const modalContent = document.getElementById("modal-content");
     let html = "";
     html += '<div class="modal-title">Transport planen: ' + f.frn + "</div>";
-    html += '<div class="card-subtitle">Statuswechsel auf „Zum Zielort“ inkl. Klinikzuweisung</div>';
+    html += '<div class="card-subtitle">Statuswechsel auf „Zum Zielort" inkl. Klinikzuweisung</div>';
 
     // Klinik-Auswahl
     html += '<div class="form-group mt-8"><label>Klinik</label><select id="transport-klinik">';
@@ -1452,7 +1565,20 @@ function backdropClick(event) {
 
     modalContent.innerHTML = html;
     document.getElementById("modal-backdrop").style.display = "flex";
-    updateTransportWarnings();
+    
+    // Warte kurz, bis DOM-Elemente verfügbar sind, dann initialisiere
+    setTimeout(() => {
+      updateTransportWarnings();
+      // Zusätzliche Event-Listener für sofortige Updates
+      const klinikSelect = document.getElementById("transport-klinik");
+      const katSelect = document.getElementById("transport-kat");
+      if (klinikSelect) {
+        klinikSelect.addEventListener("change", updateTransportWarnings);
+      }
+      if (katSelect) {
+        katSelect.addEventListener("change", updateTransportWarnings);
+      }
+    }, 0);
   }
 
   function updateTransportWarnings() {
@@ -1554,42 +1680,8 @@ function backdropClick(event) {
     applyStatusChange(f, targetStatus, f.currentStatus);
   }
 
-function confirmStandort(fahrzeugId, targetStatus) {
-  const select = document.getElementById("standort-select");
-  if (!select) {
-    closeModal();
-    return;
-  }
-
-  const standortId = parseInt(select.value, 10);
-  const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
-  if (!f) {
-    closeModal();
-    return;
-  }
-
-  // Standort setzen, Zielklinik zurücksetzen
-  f.standortId = standortId;
-  f.zielKlinikId = null;
-
-  saveState();
-  addLog({
-    type: "status",
-    fahrzeugId: f.id,
-    oldStatus: f.currentStatus,
-    newStatus: targetStatus,
-    text: "Standort gesetzt: " + getStandortName(standortId)
-  });
-
-  // Modal schließen
-  closeModal();
-
-  // Statuswechsel durchführen
-  applyStatusChange(f, targetStatus, f.currentStatus);
-}
-    // Kliniken
+  // Kliniken
   function loadDefaultHospitals() {
-    if (!confirm("Vorhandene Kliniken durch eine Standardliste (Region Bremen, Beispiel) ersetzen?")) return;
     const defaults = [
       "Klinikum Bremen-Mitte","Klinikum Links der Weser","Klinikum Bremen-Nord",
       "Klinikum Bremen-Ost","Rotes Kreuz Krankenhaus Bremen",
@@ -1637,7 +1729,7 @@ function confirmStandort(fahrzeugId, targetStatus) {
   function deleteKlinik(id) {
     const k = state.kliniken.find(x => x.id === id);
     if (!k) return;
-    if (!confirm("Klinik „" + k.name + "“ wirklich löschen?")) return;
+    if (!confirm("Klinik '" + k.name + "' wirklich löschen?")) return;
     state.kliniken = state.kliniken.filter(x => x.id !== id);
     saveState();
     updateAllViews();
@@ -1785,172 +1877,6 @@ function confirmStandort(fahrzeugId, targetStatus) {
       const s = countPatientsPerClinic(k.id);
       const total = s.rot + s.gelb + s.gruen + s.schwarz;
       const tr = document.createElement("tr");
-      tr.title = "Klicken für Patientenzuweisung";
-
-      tr.innerHTML =
-        "<td><strong>" + k.name + "</strong></td>" +
-        // Editierbare Kapazitäten/Freiplätze
-        '<td><input type="number" min="0" value="' + (k.freeRot ?? k.capRot ?? 0) +
-        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'rot\',this.value)" /></td>' +
-        '<td><input type="number" min="0" value="' + (k.freeGelb ?? k.capGelb ?? 0) +
-        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'gelb\',this.value)" /></td>' +
-        '<td><input type="number" min="0" value="' + (k.freeGruen ?? k.capGruen ?? 0) +
-        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'gruen\',this.value)" /></td>' +
-        '<td><input type="number" min="0" value="' + (k.freeSchwarz ?? k.capSchwarz ?? 0) +
-        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'schwarz\',this.value)" /></td>' +
-        "<td>" + total + "</td>" +
-        '<td class="text-right"><button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteKlinik(' + k.id + ');">×</button></td>';
-
-      tr.addEventListener("click", () => openKlinikZuweisungDialog(k.id));
-      tbody.appendChild(tr);
-    });
-  }
-
-  function renderPatientenStatistik() {
-    const tbody = document.getElementById("table-patienten-kliniken");
-    tbody.innerHTML = "";
-    state.kliniken.forEach(k => {
-      const s = countPatientsPerClinic(k.id);
-      const total = s.rot + s.gelb + s.gruen + s.schwarz;
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>" + k.name + "</td>" +
-        '<td style="color:#ef4444;font-weight:600;">' + s.rot + "</td>" +
-        '<td style="color:#f59e0b;font-weight:600;">' + s.gelb + "</td>" +
-        '<td style="color:#22c55e;font-weight:600;">' + s.gruen + "</td>" +
-        '<td style="color:#111827;font-weight:600;">' + s.schwarz + "</td>" +
-        "<td>" + total + "</td>";
-      tbody.appendChild(tr);
-    });
-
-    const tbodyP = document.getElementById("table-patienten");
-    tbodyP.innerHTML = "";
-    const colorMap = {
-      rot: "#ef4444",
-      gelb: "#f59e0b",
-      gruen: "#22c55e",
-      schwarz: "#111827"
-    };
-    state.patients.forEach(p => {
-      const f = state.fahrzeuge.find(x => x.id === p.fahrzeugId);
-      const k = state.kliniken.find(x => x.id === p.klinikId);
-      const start = new Date(p.start);
-      const dur = formatDuration(Date.now() - start.getTime());
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>" + p.id + "</td>" +
-        '<td style="color:' + (colorMap[p.kat] || "#000") + ';font-weight:600;">' + p.kat + "</td>" +
-        "<td>" + (f ? f.frn : "-") + "</td>" +
-        "<td>" + (k ? k.name : "-") + "</td>" +
-        "<td>" + formatDateTime(p.start) + "</td>" +
-        "<td>" + dur + "</td>";
-      tbodyP.appendChild(tr);
-    });
-  }
-
-  // Standorte
-  function addStandort(ev) {
-    ev.preventDefault();
-    const input = document.getElementById("neuer-standort");
-    const name = input.value.trim();
-    if (!name) return;
-    const id = Date.now();
-    standorte.push({ id, name });
-    state.standorte = standorte;
-    saveState();
-    input.value = "";
-    renderStandortListe();
-  }
-
-  function deleteStandort(id) {
-    if (!confirm("Standort wirklich löschen?")) return;
-    standorte = standorte.filter(s => s.id !== id);
-    state.standorte = standorte;
-    saveState();
-    renderStandortListe();
-  }
-
-  function renderStandortListe() {
-    const el = document.getElementById("standort-liste");
-    if (!el) return;
-    if (standorte.length === 0) {
-      el.innerHTML = '<span class="muted">Keine Standorte definiert.</span>';
-      return;
-    }
-    let html = "<ul style='margin:0;padding-left:18px;'>";
-    standorte.forEach(s => {
-      html += '<li>' + s.name + ' <button class="btn btn-sm btn-danger" style="padding:2px 6px;font-size:11px;" onclick="deleteStandort(' + s.id + ')">×</button></li>';
-    });
-    html += "</ul>";
-    el.innerHTML = html;
-  }
-
-  // Logbuch
-  function addLog(entry) {
-    const enriched = Object.assign({ id:Date.now(), time:nowIso() }, entry);
-    state.logs.push(enriched);
-    saveState();
-    renderLog();
-  }
-
-  function addFreitextLog(ev) {
-    ev.preventDefault();
-    const text = document.getElementById("log-text").value.trim();
-    if (!text) return;
-    addLog({ type:"text", text });
-    document.getElementById("log-text-form").reset();
-  }
-
-  function renderLog() {
-    const list = document.getElementById("log-list");
-    const logs = [...state.logs].sort((a,b)=>new Date(a.time)-new Date(b.time));
-    list.innerHTML="";
-    logs.forEach(l=>{
-      const div=document.createElement("div");
-      div.className="log-entry";
-      let line='<span class="log-time">'+formatTime(l.time)+'</span>';
-      if (l.type==="status") {
-        const f = state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
-        const old = l.oldStatus ? STATUS_DEFS[l.oldStatus] : null;
-        const neu = STATUS_DEFS[l.newStatus];
-        if (f) line+='<span class="pill">'+f.frn+'</span>';
-        line+='<span class="pill">Status '+(old?old.code:"-")+" → "+neu.code+"</span>";
-        if (l.einsatzId) line+='<span class="pill">Einsatz #'+l.einsatzId+"</span>";
-      } else if (l.type==="transport") {
-        const f = state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
-        const k = state.kliniken.find(x=>x.id===l.klinikId);
-        if (f) line+='<span class="pill">'+f.frn+'</span>';
-        if (k) line+='<span class="pill">'+k.name+'</span>';
-        line+='<span class="pill">'+l.kat+'</span>';
-        line+="<span>"+l.anzahl+" Patient(en) transportiert</span>";
-      } else if (l.type==="text") {
-        line+="<span>"+l.text+"</span>";
-      } else if (l.type==="system") {
-        line+='<span class="pill">System</span><span>'+l.text+"</span>";
-      }
-      div.innerHTML=line;
-      list.appendChild(div);
-    });
-  }
-
-  // Kliniken / Statistik
-  function countPatientsPerClinic(klinikId) {
-    const stats = { rot: 0, gelb: 0, gruen: 0, schwarz: 0 };
-    state.transports.forEach(t => {
-      if (t.klinikId === klinikId && stats[t.kat] != null) {
-        stats[t.kat] += t.anzahl;
-      }
-    });
-    return stats;
-  }
-
-  function renderKliniken() {
-    const tbody = document.getElementById("table-kliniken");
-    tbody.innerHTML = "";
-    state.kliniken.forEach(k => {
-      const s = countPatientsPerClinic(k.id);
-      const total = s.rot + s.gelb + s.gruen + s.schwarz;
-      const tr = document.createElement("tr");
       tr.style.cursor = "pointer";
       tr.title = "Klicken für Patientenzuweisung";
       tr.innerHTML =
@@ -2014,7 +1940,85 @@ function confirmStandort(fahrzeugId, targetStatus) {
     });
   }
 
-  // Tabellen + Filter für „Rettungsmittel vor Ort“
+  // Standorte
+  function addStandort(ev) {
+    ev.preventDefault();
+    const input = document.getElementById("neuer-standort");
+    const name = input.value.trim();
+    if (!name) return;
+    const id = Date.now();
+    standorte.push({ id, name });
+    state.standorte = standorte;
+    saveState();
+    input.value = "";
+    renderStandortListe();
+  }
+
+  function deleteStandort(id) {
+    if (!confirm("Standort wirklich löschen?")) return;
+    standorte = standorte.filter(s => s.id !== id);
+    state.standorte = standorte;
+    saveState();
+    renderStandortListe();
+  }
+
+  function renderStandortListe() {
+    const el = document.getElementById("standort-liste");
+    if (!el) return;
+    if (standorte.length === 0) {
+      el.innerHTML = '<span class="muted">Keine Standorte definiert.</span>';
+      return;
+    }
+    let html = "<ul style='margin:0;padding-left:18px;'>";
+    standorte.forEach(s => {
+      html += '<li>' + s.name + ' <button class="btn btn-sm btn-danger" style="padding:2px 6px;font-size:11px;" onclick="deleteStandort(' + s.id + ')">×</button></li>';
+    });
+    html += "</ul>";
+    el.innerHTML = html;
+  }
+
+  // Logbuch
+  function addFreitextLog(ev) {
+    ev.preventDefault();
+    const text = document.getElementById("log-text").value.trim();
+    if (!text) return;
+    addLog({ type:"text", text });
+    document.getElementById("log-text-form").reset();
+  }
+
+  function renderLog() {
+    const list = document.getElementById("log-list");
+    const logs = [...state.logs].sort((a,b)=>new Date(a.time)-new Date(b.time));
+    list.innerHTML="";
+    logs.forEach(l=>{
+      const div=document.createElement("div");
+      div.className="log-entry";
+      let line='<span class="log-time">'+formatTime(l.time)+'</span>';
+      if (l.type==="status") {
+        const f = state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
+        const old = l.oldStatus ? STATUS_DEFS[l.oldStatus] : null;
+        const neu = STATUS_DEFS[l.newStatus];
+        if (f) line+='<span class="pill">'+f.frn+'</span>';
+        line+='<span class="pill">Status '+(old?old.code:"-")+" → "+neu.code+"</span>";
+        if (l.einsatzId) line+='<span class="pill">Einsatz #'+l.einsatzId+"</span>";
+      } else if (l.type==="transport") {
+        const f = state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
+        const k = state.kliniken.find(x=>x.id===l.klinikId);
+        if (f) line+='<span class="pill">'+f.frn+'</span>';
+        if (k) line+='<span class="pill">'+k.name+'</span>';
+        line+='<span class="pill">'+l.kat+'</span>';
+        line+="<span>"+l.anzahl+" Patient(en) transportiert</span>";
+      } else if (l.type==="text") {
+        line+="<span>"+l.text+"</span>";
+      } else if (l.type==="system") {
+        line+='<span class="pill">System</span><span>'+l.text+"</span>";
+      }
+      div.innerHTML=line;
+      list.appendChild(div);
+    });
+  }
+
+  // Tabellen + Filter für „Rettungsmittel vor Ort"
   function renderFahrzeugeTables() {
     const tbody = document.getElementById("table-fahrzeuge");
     const tbodyEinsatz = document.getElementById("table-einsatz-fahrzeuge");
@@ -2084,425 +2088,9 @@ function confirmStandort(fahrzeugId, targetStatus) {
     }
   }
 
-function exportToPDF() {
-  // jsPDF sicher holen (für aktuelle UMD-Versionen)
-  const JsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-  if (!JsPDFCtor) {
-    alert("jsPDF ist nicht geladen. Bitte überprüfen Sie Ihre Internetverbindung oder laden Sie die Seite neu.");
-    return;
+  function exportToPDF() {
+    alert("PDF-Export ist in dieser vereinfachten Version nicht aktiviert.");
   }
-
-  const doc = new JsPDFCtor({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4"
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 12;
-  const contentWidth = pageWidth - 2 * margin;
-  let yPos = margin;
-
-  const colors = {
-    rot: [239, 68, 68],
-    gelb: [245, 158, 11],
-    gruen: [34, 197, 94],
-    schwarz: [17, 24, 39],
-    header: [31, 41, 55],
-    subheader: [107, 114, 128],
-    border: [229, 231, 235],
-    text: [31, 41, 55]
-  };
-
-  doc.setFont("Helvetica", "normal");
-
-  // ====== SEITE 1: ÜBERSICHT ======
-
-  doc.setFontSize(20);
-  doc.setTextColor(...colors.header);
-  doc.text("Einsatzbericht", margin, yPos);
-  yPos += 8;
-
-  doc.setFontSize(11);
-  doc.setTextColor(...colors.text);
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("de-DE", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-  doc.text("Erzeugung: " + dateStr, margin, yPos);
-  yPos += 6;
-
-  doc.setDrawColor(...colors.border);
-  doc.setLineWidth(0.5);
-  doc.line(margin, yPos, pageWidth - margin, yPos);
-  yPos += 6;
-
-  const einsaetze = state.einsatz ? [state.einsatz] : [];
-  const fahrzeuge = Array.isArray(state.fahrzeuge) ? state.fahrzeuge : [];
-  const kliniken = Array.isArray(state.kliniken) ? state.kliniken : [];
-  const patients = Array.isArray(state.patients) ? state.patients : [];
-
-  const einsatzData = [
-    ["Einsätze insgesamt", einsaetze.length.toString()],
-    ["Fahrzeuge", fahrzeuge.length.toString()],
-    ["Kliniken", kliniken.length.toString()],
-    ["Patienten transportiert", patients.length.toString()]
-  ];
-
-  doc.setFontSize(10);
-  einsatzData.forEach(row => {
-    if (yPos > pageHeight - 20) {
-      doc.addPage();
-      yPos = margin;
-    }
-    doc.setTextColor(...colors.subheader);
-    doc.text(row[0] + ":", margin, yPos);
-    doc.setTextColor(...colors.header);
-    doc.text(row[1], margin + 50, yPos);
-    yPos += 5;
-  });
-  yPos += 4;
-
-  if (einsaetze.length > 0) {
-    doc.setFontSize(12);
-    doc.setTextColor(...colors.header);
-    doc.text("Einsätze:", margin, yPos);
-    yPos += 5;
-
-    einsaetze.forEach(e => {
-      if (yPos > pageHeight - 30) {
-        doc.addPage();
-        yPos = margin;
-      }
-
-      doc.setDrawColor(...colors.border);
-      doc.setFillColor(250, 250, 250);
-      doc.rect(margin + 2, yPos - 2, contentWidth - 4, 18, "F");
-      doc.rect(margin + 2, yPos - 2, contentWidth - 4, 18);
-
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.header);
-      doc.setFont("Helvetica", "bold");
-      const name = e.name || "Ohne Bezeichnung";
-      const id = e.id != null ? e.id : "?";
-      doc.text("Einsatz #" + id + ": " + name, margin + 4, yPos + 2);
-
-      doc.setFont("Helvetica", "normal");
-      doc.setTextColor(...colors.text);
-      doc.setFontSize(8);
-      doc.text("Ort: " + (e.location || "—"), margin + 4, yPos + 6);
-      doc.text("Lage: " + (e.lageklasse || "—"), margin + 4, yPos + 9);
-      doc.text(
-        "Gesamtpatienten: " + (e.gesamtPatienten != null ? e.gesamtPatienten : 0),
-        margin + 4,
-        yPos + 12
-      );
-
-      yPos += 20;
-    });
-  }
-
-  yPos += 4;
-
-  // ====== SEITE 2: FAHRZEUGE & STATUS ======
-
-  if (yPos > pageHeight - 50) {
-    doc.addPage();
-    yPos = margin;
-  }
-
-  doc.setFontSize(14);
-  doc.setTextColor(...colors.header);
-  doc.text("Fahrzeuge & Statusmeldungen", margin, yPos);
-  yPos += 7;
-  doc.setLineWidth(0.5);
-  doc.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
-  yPos += 4;
-
-  const statusNames = {
-    1: "Im Dienst",
-    2: "Verfügbar",
-    3: "Im Einsatz",
-    4: "Am Einsatzort",
-    5: "Rückfahrt",
-    6: "Im Dienst",
-    7: "Zum Zielort",
-    8: "Station"
-  };
-
-  const statusColors = {
-    1: [34, 197, 94],
-    2: [34, 197, 94],
-    3: [245, 158, 11],
-    4: [239, 68, 68],
-    5: [245, 158, 11],
-    6: [34, 197, 94],
-    7: [59, 130, 246],
-    8: [107, 114, 128]
-  };
-
-  doc.setFontSize(9);
-  fahrzeuge.forEach(f => {
-    if (yPos > pageHeight - 20) {
-      doc.addPage();
-      yPos = margin;
-    }
-
-    doc.setFont("Helvetica", "bold");
-    doc.setTextColor(...colors.header);
-    const frn = f.frn || "Fzg";
-    const typ = f.typ || "";
-    doc.text(frn + (typ ? " (" + typ + ")" : ""), margin, yPos);
-
-    const statusCol = statusColors[f.currentStatus] || [107, 114, 128];
-    doc.setFillColor(...statusCol);
-    doc.setDrawColor(...statusCol);
-    const statusW = 40;
-    doc.rect(pageWidth - margin - statusW, yPos - 3, statusW - 1, 5, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(7);
-    doc.setFont("Helvetica", "normal");
-    doc.text(
-      statusNames[f.currentStatus] || "Unbekannt",
-      pageWidth - margin - statusW + 2,
-      yPos,
-      { maxWidth: statusW - 3 }
-    );
-
-    yPos += 5;
-
-    doc.setTextColor(...colors.text);
-    doc.setFontSize(8);
-    doc.setFont("Helvetica", "normal");
-
-    const einsatzName = einsaetze.find(e => e.id === f.einsatzId)?.name || "—";
-    const zielKlinikName = f.zielKlinikId
-      ? kliniken.find(k => k.id === f.zielKlinikId)?.name || "—"
-      : "—";
-
-    const details = [
-      "Besatzung: " + (f.besatzung || "—"),
-      "Einsatz: " + einsatzName,
-      "Patienten: " + (f.transportPatients || 0),
-      "Zielklinik: " + zielKlinikName
-    ];
-
-    details.forEach(detail => {
-      doc.text(detail, margin + 2, yPos);
-      yPos += 3;
-    });
-
-    yPos += 2;
-  });
-
-  // ====== SEITE 3: KLINIKEN & KAPAZITÄTEN ======
-
-  if (yPos > pageHeight - 50) {
-    doc.addPage();
-    yPos = margin;
-  }
-
-  doc.setFontSize(14);
-  doc.setTextColor(...colors.header);
-  doc.text("Kliniken & Kapazitäten", margin, yPos);
-  yPos += 7;
-  doc.setLineWidth(0.5);
-  doc.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
-  yPos += 4;
-
-  doc.setFontSize(9);
-  kliniken.forEach(k => {
-    if (yPos > pageHeight - 40) {
-      doc.addPage();
-      yPos = margin;
-    }
-
-    doc.setFont("Helvetica", "bold");
-    doc.setTextColor(...colors.header);
-    doc.text(k.name || "Klinik", margin, yPos);
-    yPos += 4;
-
-    doc.setFontSize(8);
-    doc.setFont("Helvetica", "normal");
-
-    const categories = [
-      { label: "Rot", free: k.freeRot, cap: k.capRot, color: colors.rot },
-      { label: "Gelb", free: k.freeGelb, cap: k.capGelb, color: colors.gelb },
-      { label: "Grün", free: k.freeGruen, cap: k.capGruen, color: colors.gruen },
-      { label: "Schwarz", free: k.freeSchwarz, cap: k.capSchwarz, color: colors.schwarz }
-    ];
-
-    const cellWidth = (contentWidth - 4) / 4;
-    let xPos = margin + 2;
-
-    categories.forEach(cat => {
-      doc.setFillColor(...cat.color);
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("Helvetica", "bold");
-      doc.rect(xPos, yPos, cellWidth, 4, "F");
-      doc.text(cat.label, xPos + 2, yPos + 2.5);
-
-      doc.setFont("Helvetica", "normal");
-      doc.setTextColor(...colors.text);
-      doc.rect(xPos, yPos + 4, cellWidth, 4);
-      const cap = cat.cap || 0;
-      const freeVal =
-        cat.free != null
-          ? cat.free
-          : cat.cap != null
-          ? cat.cap
-          : 0;
-      const valText = freeVal + "/" + cap;
-      doc.text(valText, xPos + 2, yPos + 6.5, { maxWidth: cellWidth - 2 });
-
-      xPos += cellWidth;
-    });
-
-    yPos += 12;
-
-    const patientsHere = patients.filter(p => p.klinikId === k.id);
-    if (patientsHere.length > 0) {
-      doc.setFontSize(7);
-      doc.setTextColor(...colors.subheader);
-      doc.text("Patienten: " + patientsHere.length, margin + 2, yPos);
-      yPos += 2;
-
-      patientsHere.forEach(p => {
-        const f = fahrzeuge.find(v => v.id === p.fahrzeugId);
-        const timeStr = p.start
-          ? new Date(p.start).toLocaleTimeString("de-DE", {
-              hour: "2-digit",
-              minute: "2-digit"
-            })
-          : "--:--";
-
-        const katColor =
-          p.kat && colors[p.kat] ? colors[p.kat] : colors.schwarz;
-        doc.setFillColor(...katColor);
-        doc.circle(margin + 3, yPos + 0.5, 1, "F");
-
-        doc.setTextColor(...colors.text);
-        const patName = p.name || "Pat.";
-        const frn = f?.frn || "—";
-        const patStr = patName + " (" + frn + ") " + timeStr;
-        doc.text(patStr, margin + 5, yPos + 1);
-        yPos += 2.5;
-      });
-    }
-
-    yPos += 3;
-  });
-
-  // ====== SEITE 4: ZUSAMMENFASSUNG ======
-
-  if (yPos > pageHeight - 40) {
-    doc.addPage();
-    yPos = margin;
-  }
-
-  doc.setFontSize(14);
-  doc.setTextColor(...colors.header);
-  doc.text("Zusammenfassung", margin, yPos);
-  yPos += 7;
-  doc.setLineWidth(0.5);
-  doc.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
-  yPos += 4;
-
-  const rotCount = patients.filter(p => p.kat === "rot").length;
-  const gelbCount = patients.filter(p => p.kat === "gelb").length;
-  const gruenCount = patients.filter(p => p.kat === "gruen").length;
-  const schwarzCount = patients.filter(p => p.kat === "schwarz").length;
-
-  doc.setFontSize(10);
-  doc.setFont("Helvetica", "bold");
-  doc.text("Patienten nach Kategorie:", margin, yPos);
-  yPos += 5;
-
-  const statData = [
-    ["Rot (kritisch):", rotCount.toString(), colors.rot],
-    ["Gelb (dringlich):", gelbCount.toString(), colors.gelb],
-    ["Grün (leicht):", gruenCount.toString(), colors.gruen],
-    ["Schwarz:", schwarzCount.toString(), colors.schwarz]
-  ];
-
-  doc.setFontSize(9);
-  doc.setFont("Helvetica", "normal");
-  statData.forEach(row => {
-    doc.setTextColor(...row[2]);
-    doc.text(row[0], margin, yPos);
-    doc.text(row[1], margin + 50, yPos);
-    yPos += 5;
-  });
-
-  yPos += 4;
-
-  doc.setFont("Helvetica", "bold");
-  doc.setTextColor(...colors.header);
-  doc.text("Gesamtkapazität (aktuell):", margin, yPos);
-  yPos += 5;
-
-  let totalCapRot = 0,
-    totalCapGelb = 0,
-    totalCapGruen = 0,
-    totalCapSchwarz = 0;
-  let totalFreeRot = 0,
-    totalFreeGelb = 0,
-    totalFreeGruen = 0,
-    totalFreeSchwarz = 0;
-
-  kliniken.forEach(k => {
-    totalCapRot += k.capRot || 0;
-    totalCapGelb += k.capGelb || 0;
-    totalCapGruen += k.capGruen || 0;
-    totalCapSchwarz += k.capSchwarz || 0;
-    totalFreeRot += k.freeRot != null ? k.freeRot : k.capRot || 0;
-    totalFreeGelb += k.freeGelb != null ? k.freeGelb : k.capGelb || 0;
-    totalFreeGruen += k.freeGruen != null ? k.freeGruen : k.capGruen || 0;
-    totalFreeSchwarz += k.freeSchwarz != null ? k.freeSchwarz : k.capSchwarz || 0;
-  });
-
-  doc.setFontSize(9);
-  doc.setFont("Helvetica", "normal");
-  const capSummary = [
-    ["Rot: ", totalFreeRot + "/" + totalCapRot, colors.rot],
-    ["Gelb: ", totalFreeGelb + "/" + totalCapGelb, colors.gelb],
-    ["Grün: ", totalFreeGruen + "/" + totalCapGruen, colors.gruen],
-    ["Schwarz: ", totalFreeSchwarz + "/" + totalCapSchwarz, colors.schwarz]
-  ];
-
-  capSummary.forEach(row => {
-    doc.setTextColor(...row[2]);
-    doc.text(row[0], margin, yPos);
-    doc.text(row[1], margin + 40, yPos);
-    yPos += 5;
-  });
-
-  // ====== FOOTER auf allen Seiten (aktuelle API) ======
-
-  const pageCount = doc.getNumberOfPages(); // moderne Methode [web:242][web:245]
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(...colors.subheader);
-    const footerY = pageHeight - 8;
-    doc.text("Seite " + i + " von " + pageCount, pageWidth / 2, footerY, {
-      align: "center"
-    });
-    doc.text(
-      "© 2026 Einsatzmanagement – " + dateStr.split(",")[0],
-      margin,
-      footerY
-    );
-  }
-
-  doc.save("Einsatzbericht_" + now.toISOString().split("T")[0] + ".pdf");
-}
 
   function tickTimers(){
     updateEinsatzTimer();
@@ -2535,6 +2123,28 @@ function exportToPDF() {
         "<td>" + formatDateTime(f.currentStatusSince) + "</td>";
       tbody.appendChild(tr);
     });
+  }
+
+  function renderStatusBarFahrzeugDropdown() {
+    const select = document.getElementById("status-bar-fahrzeug-select");
+    if (!select) return;
+    select.innerHTML = '<option value="">– auswählen –</option>';
+    state.fahrzeuge.forEach(f => {
+      const option = document.createElement("option");
+      option.value = f.id;
+      option.text = f.frn + " (" + f.typ + ")";
+      select.appendChild(option);
+    });
+    select.addEventListener("change", function() {
+      if (this.value) {
+        selectFahrzeug(parseInt(this.value, 10));
+        this.value = "";
+      }
+    });
+  }
+
+  function handleStatusBarFahrzeugChange() {
+    // Placeholder
   }
 
   document.querySelectorAll(".status-bar-badge").forEach(badge=>{
@@ -2604,12 +2214,294 @@ function exportToPDF() {
   function confirmDeleteKlinik(klinikId) {
     const k = getKlinikById(klinikId);
     if (!k) return;
-    if (!confirm("Klinik „" + k.name + "“ wirklich löschen?")) return;
+    if (!confirm("Klinik '" + k.name + "' wirklich löschen?")) return;
     state.kliniken = state.kliniken.filter(x => x.id !== klinikId);
     saveState();
     closeModal();
     renderKliniken();
     renderPatientenStatistik();
+  }
+
+  // ============== LAGEKARTE FUNKTIONEN ==============
+  let lagekarteMap = null;
+  let einsatzMarker = null;
+  let krankenhausMarker = [];
+  let currentLocation = null;
+
+  function initializeMap() {
+    const container = document.getElementById("lagekarte-container");
+    if (!container) return;
+    
+    // Karte nur einmal initialisieren
+    if (lagekarteMap) {
+      lagekarteMap.invalidateSize();
+      return;
+    }
+
+    // Bremen als Standard-Startpunkt
+    const startLat = 53.075;
+    const startLng = 8.807;
+
+    lagekarteMap = L.map("lagekarte-container").setView([startLat, startLng], 13);
+
+    // Satellite Layer (ESRI Satellite - kostenlos)
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "© Esri, DigitalGlobe, Earthstar Geographics, and others",
+      maxZoom: 18,
+      minZoom: 1
+    }).addTo(lagekarteMap);
+
+    // Standard OSM Layer als Fallback
+    const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 19
+    });
+
+    // Layer-Control
+    const layerControl = L.control.layers({
+      "Satellit": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "© Esri",
+        maxZoom: 18
+      }),
+      "Karte": osmLayer
+    });
+    layerControl.addTo(lagekarteMap);
+  }
+
+  function searchAddress() {
+    const input = document.getElementById("lagekarte-adresse").value.trim();
+    if (!input) {
+      alert("Bitte eine Adresse eingeben.");
+      return;
+    }
+
+    // Nominatim API für Geocoding
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(input)}`;
+
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        if (!data || data.length === 0) {
+          alert("Adresse nicht gefunden.");
+          return;
+        }
+
+        const result = data[0];
+        const lat = parseFloat(result.lat);
+        const lng = parseFloat(result.lon);
+        currentLocation = { lat, lng, address: result.display_name };
+
+        // Karte zentrieren
+        if (lagekarteMap) {
+          lagekarteMap.setView([lat, lng], 15);
+        }
+
+        // Einsatzort-Marker
+        if (einsatzMarker) lagekarteMap.removeLayer(einsatzMarker);
+        einsatzMarker = L.marker([lat, lng], {
+          icon: L.icon({
+            iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+            shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+            iconSize: [25, 41],
+            shadowSize: [41, 41],
+            popupAnchor: [1, -34]
+          })
+        }).addTo(lagekarteMap).bindPopup("<strong>Einsatzort</strong><br/>" + result.display_name);
+
+        // Info anzeigen
+        const infoDiv = document.getElementById("lagekarte-info");
+        infoDiv.innerHTML = 
+          "<strong>" + result.display_name + "</strong><br/>" +
+          "Breite: " + lat.toFixed(6) + "<br/>" +
+          "Länge: " + lng.toFixed(6);
+
+        // Nächste Krankenhäuser berechnen
+        updateNearestHospitals(lat, lng);
+
+        // Kliniken automatisch aktualisieren
+        loadNearestHospitalsFromMap();
+      })
+      .catch(err => {
+        console.error("Fehler bei Adresssuche:", err);
+        alert("Fehler bei der Adresssuche.");
+      });
+  }
+
+  function calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371; // Radius der Erde in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  function calculateDriveTime(distanceKm) {
+    // Geschätzte Durchschnittsgeschwindigkeit für Rettungsfahrzeuge: 50 km/h
+    const avgSpeedKmh = 50;
+    const timeHours = distanceKm / avgSpeedKmh;
+    const timeMinutes = Math.round(timeHours * 60);
+    return timeMinutes;
+  }
+
+  function updateNearestHospitals(lat, lng) {
+    // Krankenhäuser mit echten Koordinaten aus state.kliniken
+    const hospitals = state.kliniken
+      .filter(k => k.lat && k.lng)
+      .map(k => {
+        return { name: k.name, id: k.id, lat: k.lat, lng: k.lng };
+      });
+
+    // Entfernungen berechnen
+    const sorted = hospitals
+      .map(h => ({
+        ...h,
+        distance: calculateDistance(lat, lng, h.lat, h.lng)
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 10);
+
+    // Alte Marker löschen
+    krankenhausMarker.forEach(m => {
+      if (lagekarteMap && lagekarteMap.hasLayer(m)) {
+        lagekarteMap.removeLayer(m);
+      }
+    });
+    krankenhausMarker = [];
+
+    // Liste rendern
+    const listDiv = document.getElementById("krankenhaeuser-list");
+    let html = "";
+    sorted.forEach(h => {
+      const driveTime = calculateDriveTime(h.distance);
+      html += '<div class="krankenhaus-item" onclick="focusHospital(' + h.lat + ',' + h.lng + ')">';
+      html += '<div class="krankenhaus-item-name">' + h.name + '</div>';
+      html += '<div class="krankenhaus-item-distance">' + h.distance.toFixed(1) + ' km • ~' + driveTime + ' Min. Fahrtzeit</div>';
+      html += '</div>';
+
+      // Marker auf Karte
+      const marker = L.marker([h.lat, h.lng], {
+        icon: L.icon({
+          iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+          iconSize: [25, 41],
+          shadowSize: [41, 41],
+          popupAnchor: [1, -34]
+        })
+      }).addTo(lagekarteMap).bindPopup("<strong>" + h.name + "</strong><br/>" + h.distance.toFixed(1) + " km • ~" + driveTime + " Min.");
+      krankenhausMarker.push(marker);
+    });
+
+    if (html === "") {
+      html = '<div class="muted">Keine Krankenhäuser definiert.</div>';
+    }
+    listDiv.innerHTML = html;
+  }
+
+  function focusHospital(lat, lng) {
+    if (lagekarteMap) {
+      lagekarteMap.setView([lat, lng], 15);
+    }
+  }
+
+  function loadNearestHospitalsFromMap() {
+    // Prüfen ob eine Adresse in der Lagekarte eingegeben wurde
+    if (!currentLocation) {
+      alert("Bitte zuerst eine Adresse in der Lagekarte eingeben!");
+      switchView('lagekarte');
+      return;
+    }
+
+    const lat = currentLocation.lat;
+    const lng = currentLocation.lng;
+
+    // Overpass API: Suche nach Krankenhäusern mit Notaufnahme im Umkreis von 20km
+    const radius = 20000; // 20km in Metern
+    const overpassQuery = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="hospital"]["emergency"="yes"](around:${radius},${lat},${lng});
+        way["amenity"="hospital"]["emergency"="yes"](around:${radius},${lat},${lng});
+        relation["amenity"="hospital"]["emergency"="yes"](around:${radius},${lat},${lng});
+      );
+      out center;
+    `;
+    
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+
+    fetch(overpassUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (!data || !data.elements || data.elements.length === 0) {
+          console.log("Keine Krankenhäuser in der Nähe gefunden");
+          loadDefaultHospitals();
+          return;
+        }
+
+        // Entfernungen berechnen
+        const hospitalsWithDistance = data.elements
+          .filter(h => {
+            // Für nodes direkt lat/lon, für ways/relations center
+            return (h.lat && h.lon) || (h.center && h.center.lat && h.center.lon);
+          })
+          .map(h => {
+            const hospitalLat = h.lat || h.center.lat;
+            const hospitalLng = h.lon || h.center.lon;
+            const hospitalName = h.tags?.name || h.tags?.["name:de"] || "Unbenanntes Krankenhaus";
+            
+            return {
+              name: hospitalName,
+              lat: parseFloat(hospitalLat),
+              lng: parseFloat(hospitalLng),
+              distance: calculateDistance(lat, lng, parseFloat(hospitalLat), parseFloat(hospitalLng))
+            };
+          })
+          .sort((a, b) => a.distance - b.distance)
+          .slice(0, 10);
+
+        if (hospitalsWithDistance.length === 0) {
+          console.log("Keine Krankenhäuser mit Koordinaten gefunden");
+          return;
+        }
+
+        // Kapazitäten variieren (zufällig oder basierend auf Entfernung)
+        state.kliniken = hospitalsWithDistance.map((h, idx) => {
+          // Kapazitäten variieren: nähere Kliniken haben größere Kapazitäten
+          const factor = 1 + (hospitalsWithDistance.length - idx) / hospitalsWithDistance.length;
+          const capRot = Math.round(3 * factor);
+          const capGelb = Math.round(6 * factor);
+          const capGruen = Math.round(8 * factor);
+          const capSchwarz = Math.round(2 * factor);
+
+          return {
+            id: Date.now() + idx,
+            name: h.name,
+            lat: h.lat,
+            lng: h.lng,
+            distance: h.distance,
+            capRot,
+            capGelb,
+            capGruen,
+            capSchwarz,
+            freeRot: capRot,
+            freeGelb: capGelb,
+            freeGruen: capGruen,
+            freeSchwarz: capSchwarz
+          };
+        });
+
+        saveState();
+        updateAllViews();
+      })
+      .catch(err => {
+        console.error("Fehler beim Laden der Krankenhäuser:", err);
+        loadDefaultHospitals();
+      });
   }
 </script>
 </body>
