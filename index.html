@@ -550,7 +550,7 @@
                     <option>MANV</option>
                     <option>MANV5</option>
                     <option>MANV10</option>
-                    <option>MANV10</option>
+                    <option>MANV15</option>
                     <option>MANV20</option>
                     <option>MANV50</option>
                     <option>MANV100</option>
@@ -1129,7 +1129,7 @@
     el.innerHTML=html;
   }
 
-  // Lagemeldungen im Einsatz-Tab
+   // Lagemeldungen im Einsatz-Tab
   function addLagemeldungEinsatz(ev) {
     ev.preventDefault();
     const text = document.getElementById("lage-text-einsatz").value.trim();
@@ -1150,7 +1150,7 @@
       return;
     }
     let html = "";
-    textLogs.slice(0, 10).forEach(l => {
+    textLogs.forEach(l => {
       html += '<div class="log-entry">';
       html += '<span class="log-time">' + formatTime(l.time) + '</span>';
       html += '<span>' + l.text + '</span>';
@@ -1309,44 +1309,21 @@
     updateAllViews();
   }
 
-  // Dropdown in Status-Leiste
-  function renderStatusBarFahrzeugDropdown() {
-    const select = document.getElementById("status-bar-fahrzeug-select");
-    if (!select) return;
-
-    const currentValue = select.value;
-    select.innerHTML = '<option value="">– auswählen –</option>';
-
-    state.fahrzeuge.forEach(f => {
-      const opt = document.createElement("option");
-      opt.value = String(f.id);
-      opt.textContent = f.frn + " (" + getCurrentStatus(f).code + ")";
-      if (String(f.id) === currentValue || f.id === selectedFahrzeugId) {
-        opt.selected = true;
-      }
-      select.appendChild(opt);
-    });
-
-    if (selectedFahrzeugId && !state.fahrzeuge.find(f => f.id === selectedFahrzeugId)) {
-      selectedFahrzeugId = null;
-    }
-  }
-
-  function handleStatusBarFahrzeugChange(ev) {
-    const val = ev.target.value;
-    if (!val) {
-      selectedFahrzeugId = null;
-      const label = document.getElementById("status-bar-selected");
-      if (label) label.textContent = "kein Fahrzeug gewählt";
-      return;
-    }
-    const id = parseInt(val, 10);
-    const f = state.fahrzeuge.find(x => x.id === id);
+  // Funkrufnamen nachträglich ändern
+  function updateFahrzeugFRN(fahrzeugId, value) {
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
     if (!f) return;
-    selectedFahrzeugId = id;
-    const label = document.getElementById("status-bar-selected");
-    if (label) label.textContent = f.frn + " (" + getCurrentStatus(f).code + ")";
-    highlightSelectedRow(id);
+    const frn = value.trim();
+    if (!frn) return;
+    f.frn = frn;
+    saveState();
+    renderFahrzeugeTables();
+    if (selectedFahrzeugId === fahrzeugId) {
+      renderFahrzeugDetail(f);
+      const label = document.getElementById("status-bar-selected");
+      if (label) label.textContent = f.frn + " (" + getCurrentStatus(f).code + ")";
+      renderStatusBarFahrzeugDropdown();
+    }
   }
 
   // Standort-Dialog
@@ -1543,7 +1520,7 @@
   }
   function backdropClick(){ closeModal(); }
 
-  // Kliniken
+    // Kliniken
   function loadDefaultHospitals() {
     if (!confirm("Vorhandene Kliniken durch eine Standardliste (Region Bremen, Beispiel) ersetzen?")) return;
     const defaults = [
@@ -1599,7 +1576,7 @@
     updateAllViews();
   }
 
-  // NEU: Kapazitäten frei/Cap direkt in der Tabelle änderbar machen
+  // Kapazitäten direkt in der Tabelle änderbar
   function updateKlinikKapazitaet(klinikId, farbe, value) {
     const k = state.kliniken.find(x => x.id === klinikId);
     if (!k) return;
@@ -1609,7 +1586,10 @@
     const freeKey = { rot:"freeRot", gelb:"freeGelb", gruen:"freeGruen", schwarz:"freeSchwarz" }[farbe];
 
     k[capKey] = v;
-    k[freeKey] = v;  // falls du später differenzieren willst, hier anpassen
+    // optional: freie Plätze mit anpassen
+    if ((k.freeRot ?? k.capRot) === k[capKey] || k[freeKey] == null) {
+      k[freeKey] = v;
+    }
     saveState();
     renderKliniken();
     renderPatientenStatistik();
@@ -1651,7 +1631,7 @@
     html += '<div class="form-group"><label>Anzahl Patienten</label>';
     html += '<input type="number" id="klinik-anzahl" min="1" value="1" /></div>';
 
-    // Optional: Patientenname
+    // Patientenname optional
     html += '<div class="form-group"><label>Patientenname (optional)</label>';
     html += '<input type="text" id="klinik-patient-name" placeholder="z.B. Mustermann, Max" /></div>';
 
@@ -1743,22 +1723,21 @@
       const s = countPatientsPerClinic(k.id);
       const total = s.rot + s.gelb + s.gruen + s.schwarz;
       const tr = document.createElement("tr");
-      tr.style.cursor = "pointer";
       tr.title = "Klicken für Patientenzuweisung";
 
       tr.innerHTML =
         "<td><strong>" + k.name + "</strong></td>" +
         // Editierbare Kapazitäten/Freiplätze
         '<td><input type="number" min="0" value="' + (k.freeRot ?? k.capRot ?? 0) +
-        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'rot\',this.value)" /></td>' +
+        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'rot\',this.value)" /></td>' +
         '<td><input type="number" min="0" value="' + (k.freeGelb ?? k.capGelb ?? 0) +
-        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'gelb\',this.value)" /></td>' +
+        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'gelb\',this.value)" /></td>' +
         '<td><input type="number" min="0" value="' + (k.freeGruen ?? k.capGruen ?? 0) +
-        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'gruen\',this.value)" /></td>' +
+        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'gruen\',this.value)" /></td>' +
         '<td><input type="number" min="0" value="' + (k.freeSchwarz ?? k.capSchwarz ?? 0) +
-        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'schwarz\',this.value)" /></td>' +
+        '" style="width:60px" onclick="event.stopPropagation()" onchange="updateKlinikKapazitaet(' + k.id + ',\'schwarz\',this.value)" /></td>' +
         "<td>" + total + "</td>" +
-        '<td class="text-right"><button class="btn btn-sm btn-danger" onclick="deleteKlinik(' + k.id + '); event.stopPropagation();">×</button></td>';
+        '<td class="text-right"><button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteKlinik(' + k.id + ');">×</button></td>';
 
       tr.addEventListener("click", () => openKlinikZuweisungDialog(k.id));
       tbody.appendChild(tr);
