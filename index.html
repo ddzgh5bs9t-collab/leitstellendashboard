@@ -1325,31 +1325,34 @@
       renderStatusBarFahrzeugDropdown();
     }
   }
-
   // Standort-Dialog
   function openStandortDialog(fahrzeugId, targetStatus) {
-    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
-    if (!f) return;
-    const modalContent = document.getElementById("modal-content");
-    let html = "";
-    html += '<div class="modal-title">Standort wählen: ' + f.frn + "</div>";
-    html += '<div class="card-subtitle">Wohin fährt das Fahrzeug? (Status 3 – Anfahrt)</div>';
+  const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+  if (!f) return;
 
-    html += '<div class="form-group mt-8"><label>Standort / Einsatzort</label><select id="standort-select">';
-    standorte.forEach(s => {
-      html += '<option value="' + s.id + '">' + s.name + '</option>';
-    });
-    html += '</select></div>';
+  const modalContent = document.getElementById("modal-content");
+  let html = "";
 
-    html += '<div class="modal-footer">';
-    html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
-    html += '<button class="btn btn-sm" onclick="confirmStandort(' + fahrzeugId + ',' + targetStatus + ')">Bestätigen</button>';
-    html += '</div>';
+  html += '<div class="modal-title">Standort wählen – ' + f.frn + '</div>';
+  html += '<div class="card-subtitle">Wohin fährt das Fahrzeug? Status 3: Anfahrt</div>';
 
-    modalContent.innerHTML = html;
-    document.getElementById("modal-backdrop").style.display = "flex";
-  }
+  html += '<div class="form-group mt-8">';
+  html += '<label>Standort / Einsatzort</label>';
+  html += '<select id="standort-select">';
+  standorte.forEach(s => {
+    html += '<option value="' + s.id + '">' + s.name + '</option>';
+  });
+  html += '</select>';
+  html += '</div>';
 
+  html += '<div class="modal-footer">';
+  html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
+  html += '<button class="btn btn-sm" onclick="confirmStandort(' + fahrzeugId + ', ' + targetStatus + ')">Bestätigen</button>';
+  html += '</div>';
+
+  modalContent.innerHTML = html;
+  document.getElementById("modal-backdrop").style.display = "flex";
+}
   function confirmStandort(fahrzeugId, targetStatus) {
     const select = document.getElementById("standort-select");
     if (!select) return;
@@ -1452,93 +1455,39 @@
     }
   }
 
-  function confirmTransport(fahrzeugId, targetStatus) {
-    const klinikSelect = document.getElementById("transport-klinik");
-    const katSelect = document.getElementById("transport-kat");
-    const anzahlInput = document.getElementById("transport-anzahl");
-
-    if (!klinikSelect || !katSelect || !anzahlInput) {
-      alert("Transportdialog ist unvollständig. Bitte erneut versuchen.");
-      closeModal();
-      return;
-    }
-
-    if (klinikSelect.options.length === 0) {
-      alert("Keine Klinik angelegt.");
-      closeModal();
-      return;
-    }
-
-    const klinikId = parseInt(klinikSelect.value, 10);
-    const kat = katSelect.value;
-    const anzahl = parseInt(anzahlInput.value, 10) || 1;
-    const patientName = (document.getElementById("transport-patient-name")?.value || "").trim();
-
-    const klinik = getKlinikById(klinikId);
-    if (!klinik) {
-      alert("Bitte eine gültige Klinik auswählen.");
-      return;
-    }
-
-    const capKeyMap = {
-      rot: "capRot",
-      gelb: "capGelb",
-      gruen: "capGruen",
-      schwarz: "capSchwarz"
-    };
-    const freeKeyMap = {
-      rot: "freeRot",
-      gelb: "freeGelb",
-      gruen: "freeGruen",
-      schwarz: "freeSchwarz"
-    };
-
-    const capKey = capKeyMap[kat];
-    const freeKey = freeKeyMap[kat];
-
-    klinik[freeKey] = (klinik[freeKey] ?? klinik[capKey] ?? 0) - anzahl;
-
-    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
-    if (f) f.transportPatients = (f.transportPatients || 0) + anzahl;
-
-    const transportId = Date.now();
-    state.transports.push({
-      id: transportId,
-      fahrzeugId,
-      klinikId,
-      kat,
-      anzahl,
-      time: nowIso()
-    });
-
-    // Patienten anlegen (mit optionalem Namen)
-    for (let i = 0; i < anzahl; i++) {
-      state.patients.push({
-        id: transportId + "-" + (i + 1),
-        kat,
-        fahrzeugId,
-        klinikId,
-        start: nowIso(),
-        name: patientName || null
-      });
-    }
-
-    if (f) {
-      f.zielKlinikId = klinikId;
-      f.standortId = null;
-    }
-
-    saveState();
-    addLog({ type: "transport", fahrzeugId, klinikId, kat, anzahl, text: "Transport zu Klinik" });
-
-    // Modal schließen
+function confirmStandort(fahrzeugId, targetStatus) {
+  const select = document.getElementById("standort-select");
+  if (!select) {
     closeModal();
-
-    // Statuswechsel durchführen
-    const f2 = state.fahrzeuge.find(x => x.id === fahrzeugId);
-    if (f2) applyStatusChange(f2, targetStatus, f2.currentStatus);
+    return;
   }
 
+  const standortId = parseInt(select.value, 10);
+  const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+  if (!f) {
+    closeModal();
+    return;
+  }
+
+  // Standort setzen, Zielklinik zurücksetzen
+  f.standortId = standortId;
+  f.zielKlinikId = null;
+
+  saveState();
+  addLog({
+    type: "status",
+    fahrzeugId: f.id,
+    oldStatus: f.currentStatus,
+    newStatus: targetStatus,
+    text: "Standort gesetzt: " + getStandortName(standortId)
+  });
+
+  // Modal schließen
+  closeModal();
+
+  // Statuswechsel durchführen
+  applyStatusChange(f, targetStatus, f.currentStatus);
+}
     // Kliniken
   function loadDefaultHospitals() {
     if (!confirm("Vorhandene Kliniken durch eine Standardliste (Region Bremen, Beispiel) ersetzen?")) return;
