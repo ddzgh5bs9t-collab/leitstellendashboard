@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Einsatz-Dashboard Rettungsdienst</title>
+  <title>Leitstellendashboard MANV</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
@@ -1513,14 +1513,15 @@
     });
 
     for (let i = 0; i < anzahl; i++) {
-      state.patients.push({
-        id: transportId + "-" + (i + 1),
-        kat,
-        fahrzeugId,
-        klinikId,
-        start: nowIso()
-      });
-    }
+  state.patients.push({
+    id: transportId + "-" + (i + 1),
+    kat,
+    fahrzeugId,
+    klinikId,
+    start: nowIso(),
+    name: patientName || null   // NEU
+  });
+}
 
     const fTarget = state.fahrzeuge.find(x => x.id === fahrzeugId);
     if (fTarget) {
@@ -1598,6 +1599,22 @@
     updateAllViews();
   }
 
+  // NEU: Kapazitäten frei/Cap direkt in der Tabelle änderbar machen
+  function updateKlinikKapazitaet(klinikId, farbe, value) {
+    const k = state.kliniken.find(x => x.id === klinikId);
+    if (!k) return;
+    const v = Math.max(0, parseInt(value, 10) || 0);
+
+    const capKey = { rot:"capRot", gelb:"capGelb", gruen:"capGruen", schwarz:"capSchwarz" }[farbe];
+    const freeKey = { rot:"freeRot", gelb:"freeGelb", gruen:"freeGruen", schwarz:"freeSchwarz" }[farbe];
+
+    k[capKey] = v;
+    k[freeKey] = v;  // falls du später differenzieren willst, hier anpassen
+    saveState();
+    renderKliniken();
+    renderPatientenStatistik();
+  }
+
   function openKlinikZuweisungDialog(klinikId) {
     const k = getKlinikById(klinikId);
     if (!k) return;
@@ -1634,6 +1651,10 @@
     html += '<div class="form-group"><label>Anzahl Patienten</label>';
     html += '<input type="number" id="klinik-anzahl" min="1" value="1" /></div>';
 
+    // Optional: Patientenname
+    html += '<div class="form-group"><label>Patientenname (optional)</label>';
+    html += '<input type="text" id="klinik-patient-name" placeholder="z.B. Mustermann, Max" /></div>';
+
     html += '<div class="modal-footer">';
     html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
     html += '<button class="btn btn-sm" onclick="confirmKlinikZuweisung(' + klinikId + ')">Transport starten</button>';
@@ -1647,6 +1668,7 @@
     const fahrzeugId = parseInt(document.getElementById("klinik-fahrzeug").value, 10);
     const kat = document.getElementById("klinik-kat").value;
     const anzahl = parseInt(document.getElementById("klinik-anzahl").value, 10) || 1;
+    const patientName = (document.getElementById("klinik-patient-name")?.value || "").trim();
 
     const klinik = getKlinikById(klinikId);
     const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
@@ -1692,7 +1714,8 @@
         kat,
         fahrzeugId,
         klinikId,
-        start: nowIso()
+        start: nowIso(),
+        name: patientName || null
       });
     }
 
@@ -1701,6 +1724,87 @@
     closeModal();
 
     applyStatusChange(f, 7, f.currentStatus);
+  }
+
+  function countPatientsPerClinic(klinikId) {
+    const stats = { rot: 0, gelb: 0, gruen: 0, schwarz: 0 };
+    state.transports.forEach(t => {
+      if (t.klinikId === klinikId && stats[t.kat] != null) {
+        stats[t.kat] += t.anzahl;
+      }
+    });
+    return stats;
+  }
+
+  function renderKliniken() {
+    const tbody = document.getElementById("table-kliniken");
+    tbody.innerHTML = "";
+    state.kliniken.forEach(k => {
+      const s = countPatientsPerClinic(k.id);
+      const total = s.rot + s.gelb + s.gruen + s.schwarz;
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.title = "Klicken für Patientenzuweisung";
+
+      tr.innerHTML =
+        "<td><strong>" + k.name + "</strong></td>" +
+        // Editierbare Kapazitäten/Freiplätze
+        '<td><input type="number" min="0" value="' + (k.freeRot ?? k.capRot ?? 0) +
+        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'rot\',this.value)" /></td>' +
+        '<td><input type="number" min="0" value="' + (k.freeGelb ?? k.capGelb ?? 0) +
+        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'gelb\',this.value)" /></td>' +
+        '<td><input type="number" min="0" value="' + (k.freeGruen ?? k.capGruen ?? 0) +
+        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'gruen\',this.value)" /></td>' +
+        '<td><input type="number" min="0" value="' + (k.freeSchwarz ?? k.capSchwarz ?? 0) +
+        '" style="width:60px" onchange="updateKlinikKapazitaet(' + k.id + ',\'schwarz\',this.value)" /></td>' +
+        "<td>" + total + "</td>" +
+        '<td class="text-right"><button class="btn btn-sm btn-danger" onclick="deleteKlinik(' + k.id + '); event.stopPropagation();">×</button></td>';
+
+      tr.addEventListener("click", () => openKlinikZuweisungDialog(k.id));
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderPatientenStatistik() {
+    const tbody = document.getElementById("table-patienten-kliniken");
+    tbody.innerHTML = "";
+    state.kliniken.forEach(k => {
+      const s = countPatientsPerClinic(k.id);
+      const total = s.rot + s.gelb + s.gruen + s.schwarz;
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + k.name + "</td>" +
+        '<td style="color:#ef4444;font-weight:600;">' + s.rot + "</td>" +
+        '<td style="color:#f59e0b;font-weight:600;">' + s.gelb + "</td>" +
+        '<td style="color:#22c55e;font-weight:600;">' + s.gruen + "</td>" +
+        '<td style="color:#111827;font-weight:600;">' + s.schwarz + "</td>" +
+        "<td>" + total + "</td>";
+      tbody.appendChild(tr);
+    });
+
+    const tbodyP = document.getElementById("table-patienten");
+    tbodyP.innerHTML = "";
+    const colorMap = {
+      rot: "#ef4444",
+      gelb: "#f59e0b",
+      gruen: "#22c55e",
+      schwarz: "#111827"
+    };
+    state.patients.forEach(p => {
+      const f = state.fahrzeuge.find(x => x.id === p.fahrzeugId);
+      const k = state.kliniken.find(x => x.id === p.klinikId);
+      const start = new Date(p.start);
+      const dur = formatDuration(Date.now() - start.getTime());
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + p.id + "</td>" +
+        '<td style="color:' + (colorMap[p.kat] || "#000") + ';font-weight:600;">' + p.kat + "</td>" +
+        "<td>" + (f ? f.frn : "-") + "</td>" +
+        "<td>" + (k ? k.name : "-") + "</td>" +
+        "<td>" + formatDateTime(p.start) + "</td>" +
+        "<td>" + dur + "</td>";
+      tbodyP.appendChild(tr);
+    });
   }
 
   // Standorte
