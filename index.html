@@ -484,7 +484,7 @@
 <div class="app">
   <!-- Sidebar -->
   <div class="sidebar">
-    <div class="sidebar-header">Einsatz-Dashboard</div>
+    <div class="sidebar-header">Leitstellendashboard</div>
     <div id="nav-einsatz" class="nav-item active" onclick="switchView('einsatz')">
       Einsatz
     </div>
@@ -492,13 +492,13 @@
       Fahrzeuge
     </div>
     <div id="nav-kliniken" class="nav-item" onclick="switchView('kliniken')">
-      Kliniken / PRIOR
+      Kliniken
     </div>
     <div id="nav-logbuch" class="nav-item" onclick="switchView('logbuch')">
-      Logbuch
+      Einsatztagebuch
     </div>
     <div id="nav-statistik" class="nav-item" onclick="switchView('statistik')">
-      Statistiken
+      Gesamtübersicht
     </div>
     <div class="sidebar-footer">
       Client-only Demo<br />
@@ -509,7 +509,7 @@
   <!-- Main -->
   <div class="main">
     <div class="topbar">
-      <div class="topbar-title">Rettungsdienst Einsatzübersicht</div>
+      <div class="topbar-title">Leitstellendashboard MANV</div>
       <div class="topbar-info">
         <span id="einsatz-running-badge" class="badge" style="display:none">
           Aktiver Einsatz: <span id="einsatz-running-text"></span>
@@ -548,6 +548,12 @@
                     <option>RD-Notfall</option>
                     <option>RD-Tragehilfe</option>
                     <option>MANV</option>
+                    <option>MANV5</option>
+                    <option>MANV10</option>
+                    <option>MANV10</option>
+                    <option>MANV20</option>
+                    <option>MANV50</option>
+                    <option>MANV100</option>
                   </select>
                   <input type="text" id="einsatz-stichwort-text" placeholder="oder freier Text" />
                 </div>
@@ -559,6 +565,7 @@
               <div class="checkbox-row">
                 <label><input type="checkbox" id="einsatz-polizei" /> Polizei mitalarmiert</label>
                 <label><input type="checkbox" id="einsatz-feuerwehr" /> Feuerwehr mitalarmiert</label>
+                <label><input type="checkbox" id="eigenschutz-beachten" /> Eigenschutz beachten!</label>
               </div>
               <div class="flex-between mt-8">
                 <div class="muted" id="einsatz-status-text">Kein Einsatz aktiv.</div>
@@ -648,8 +655,10 @@
                   <select id="fahrzeug-typ">
                     <option>RTW</option>
                     <option>NEF</option>
+                    <option>NKTW</option>
                     <option>KTW</option>
-                    <option>GW-SAN</option>
+                    <option>G RTW</option>
+                    <option>RTH</option>
                   </select>
                 </div>
               </div>
@@ -1044,7 +1053,7 @@
     document.getElementById("einsatz-lagebild").value = e.lagebild || "";
     document.getElementById("einsatz-polizei").checked = !!e.polizei;
     document.getElementById("einsatz-feuerwehr").checked = !!e.feuerwehr;
-    const known = ["NA-Rettungsdienst","RD-Notfall","RD-Tragehilfe","MANV"];
+    const known = ["NA-Rettungsdienst","RD-Notfall","RD-Tragehilfe","MANV","MANV5","MANV10","MANV20","MANV50"];
     if (known.includes(e.stichwort)) {
       document.getElementById("einsatz-stichwort").value = e.stichwort;
       document.getElementById("einsatz-stichwort-text").value = "";
