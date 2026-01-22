@@ -1372,7 +1372,10 @@ function closeModal() {
     backdrop.style.display = "none";
   }
 }
-  // Transport / Kliniken mit Farben
+
+function backdropClick(event) {
+  closeModal();
+}
   function getKlinikById(id){ if(id==null || isNaN(id)) return null; return state.kliniken.find(k=>k.id===id)||null; }
 
   function openTransportDialog(fahrzeugId, targetStatus) {
@@ -1458,6 +1461,69 @@ function closeModal() {
     } else {
       warnEl.innerHTML = 'Freie Plätze in dieser Kategorie: <span style="color:' + colorMap[kat] + ';font-weight:600;">' + free + "</span>";
     }
+  }
+
+  function confirmTransport(fahrzeugId, targetStatus) {
+    const klinikId = parseInt(document.getElementById("transport-klinik").value, 10);
+    const kat = document.getElementById("transport-kat").value;
+    const anzahl = parseInt(document.getElementById("transport-anzahl").value, 10) || 1;
+    const patientName = (document.getElementById("transport-patient-name")?.value || "").trim();
+
+    const klinik = getKlinikById(klinikId);
+    const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
+    if (!klinik || !f) {
+      alert("Ungültige Auswahl.");
+      closeModal();
+      return;
+    }
+
+    const freeKeyMap = {
+      rot: "freeRot",
+      gelb: "freeGelb",
+      gruen: "freeGruen",
+      schwarz: "freeSchwarz"
+    };
+    const capKeyMap = {
+      rot: "capRot",
+      gelb: "capGelb",
+      gruen: "capGruen",
+      schwarz: "capSchwarz"
+    };
+
+    const freeKey = freeKeyMap[kat];
+    const capKey = capKeyMap[kat];
+    klinik[freeKey] = (klinik[freeKey] ?? klinik[capKey] ?? 0) - anzahl;
+
+    f.transportPatients = (f.transportPatients || 0) + anzahl;
+    f.zielKlinikId = klinikId;
+    f.standortId = null;
+
+    const transportId = Date.now();
+    state.transports.push({
+      id: transportId,
+      fahrzeugId,
+      klinikId,
+      kat,
+      anzahl,
+      time: nowIso()
+    });
+
+    for (let i = 0; i < anzahl; i++) {
+      state.patients.push({
+        id: transportId + "-" + (i + 1),
+        kat,
+        fahrzeugId,
+        klinikId,
+        start: nowIso(),
+        name: patientName || null
+      });
+    }
+
+    saveState();
+    addLog({ type: "transport", fahrzeugId, klinikId, kat, anzahl, text: "Transport geplant" });
+    closeModal();
+
+    applyStatusChange(f, targetStatus, f.currentStatus);
   }
 
 function confirmStandort(fahrzeugId, targetStatus) {
