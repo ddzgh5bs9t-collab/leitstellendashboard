@@ -1379,12 +1379,14 @@
     html += '<div class="modal-title">Transport planen: ' + f.frn + "</div>";
     html += '<div class="card-subtitle">Statuswechsel auf „Zum Zielort“ inkl. Klinikzuweisung</div>';
 
+    // Klinik-Auswahl
     html += '<div class="form-group mt-8"><label>Klinik</label><select id="transport-klinik">';
     state.kliniken.forEach(k => {
       html += '<option value="' + k.id + '">' + k.name + "</option>";
     });
     html += "</select></div>";
 
+    // Kategorie
     html += '<div class="form-group"><label>Sichtungskategorie</label>';
     html += '<select id="transport-kat" onchange="updateTransportWarnings()">';
     html += '<option value="rot">Rot (kritisch)</option>';
@@ -1393,14 +1395,20 @@
     html += '<option value="schwarz">Schwarz</option>';
     html += "</select></div>";
 
+    // Anzahl
     html += '<div class="form-group"><label>Anzahl Patienten</label>';
     html += '<input type="number" id="transport-anzahl" min="1" value="1" /></div>';
 
+    // Patientenname optional
+    html += '<div class="form-group"><label>Patientenname (optional)</label>';
+    html += '<input type="text" id="transport-patient-name" placeholder="z.B. Mustermann, Max" /></div>';
+
+    // Hinweis freie Plätze
     html += '<div id="transport-warning" class="mt-8 muted" style="font-size:13px"></div>';
 
     html += '<div class="modal-footer">';
-    html += '<button class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
-    html += '<button class="btn btn-sm" onclick="confirmTransport(' + fahrzeugId + ',' + targetStatus + ')">Bestätigen</button>';
+    html += '<button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()">Abbrechen</button>';
+    html += '<button type="button" class="btn btn-sm" onclick="confirmTransport(' + fahrzeugId + ',' + targetStatus + ')">Bestätigen</button>';
     html += "</div>";
 
     modalContent.innerHTML = html;
@@ -1446,13 +1454,26 @@
 
   function confirmTransport(fahrzeugId, targetStatus) {
     const klinikSelect = document.getElementById("transport-klinik");
-    if (!klinikSelect || klinikSelect.options.length === 0) {
-      alert("Keine Klinik angelegt.");
+    const katSelect = document.getElementById("transport-kat");
+    const anzahlInput = document.getElementById("transport-anzahl");
+
+    if (!klinikSelect || !katSelect || !anzahlInput) {
+      alert("Transportdialog ist unvollständig. Bitte erneut versuchen.");
+      closeModal();
       return;
     }
+
+    if (klinikSelect.options.length === 0) {
+      alert("Keine Klinik angelegt.");
+      closeModal();
+      return;
+    }
+
     const klinikId = parseInt(klinikSelect.value, 10);
-    const kat = document.getElementById("transport-kat").value;
-    const anzahl = parseInt(document.getElementById("transport-anzahl").value, 10) || 1;
+    const kat = katSelect.value;
+    const anzahl = parseInt(anzahlInput.value, 10) || 1;
+    const patientName = (document.getElementById("transport-patient-name")?.value || "").trim();
+
     const klinik = getKlinikById(klinikId);
     if (!klinik) {
       alert("Bitte eine gültige Klinik auswählen.");
@@ -1474,6 +1495,7 @@
 
     const capKey = capKeyMap[kat];
     const freeKey = freeKeyMap[kat];
+
     klinik[freeKey] = (klinik[freeKey] ?? klinik[capKey] ?? 0) - anzahl;
 
     const f = state.fahrzeuge.find(x => x.id === fahrzeugId);
@@ -1489,36 +1511,33 @@
       time: nowIso()
     });
 
+    // Patienten anlegen (mit optionalem Namen)
     for (let i = 0; i < anzahl; i++) {
-  state.patients.push({
-    id: transportId + "-" + (i + 1),
-    kat,
-    fahrzeugId,
-    klinikId,
-    start: nowIso(),
-    name: patientName || null   // NEU
-  });
-}
+      state.patients.push({
+        id: transportId + "-" + (i + 1),
+        kat,
+        fahrzeugId,
+        klinikId,
+        start: nowIso(),
+        name: patientName || null
+      });
+    }
 
-    const fTarget = state.fahrzeuge.find(x => x.id === fahrzeugId);
-    if (fTarget) {
-      fTarget.zielKlinikId = klinikId;
-      fTarget.standortId = null;
+    if (f) {
+      f.zielKlinikId = klinikId;
+      f.standortId = null;
     }
 
     saveState();
     addLog({ type: "transport", fahrzeugId, klinikId, kat, anzahl, text: "Transport zu Klinik" });
+
+    // Modal schließen
     closeModal();
 
+    // Statuswechsel durchführen
     const f2 = state.fahrzeuge.find(x => x.id === fahrzeugId);
     if (f2) applyStatusChange(f2, targetStatus, f2.currentStatus);
   }
-
-  function closeModal() {
-    document.getElementById("modal-backdrop").style.display="none";
-    document.getElementById("modal-content").innerHTML="";
-  }
-  function backdropClick(){ closeModal(); }
 
     // Kliniken
   function loadDefaultHospitals() {
@@ -2013,91 +2032,386 @@
   }
 
   // PDF Export
-  function exportPdf() {
-    if (!state.einsatz) {
-      alert("Es ist kein Einsatz angelegt – PDF wäre leer.");
-      return;
-    }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    let y=10, lineHeight=6;
-    function addLine(text){ doc.text(text,10,y); y+=lineHeight; if (y>280){doc.addPage(); y=10;} }
+  function exportToPDF() {
+    // A4-Größe (210mm x 297mm) = 595x842pt im PDF
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4"
+    });
 
-    addLine("Einsatzbericht Rettungsdienst");
-    addLine("---------------------------");
-    addLine("");
-    addLine("Einsatzdaten");
-    addLine("Beginn: "+formatDateTime(state.einsatz.start));
-    addLine("Ort: "+(state.einsatz.ort||"-"));
-    addLine("Alarmstichwort: "+(state.einsatz.stichwort||"-"));
-    addLine("Lagebild: "+(state.einsatz.lagebild||"-"));
-    addLine("Polizei: "+(state.einsatz.polizei?"ja":"nein")+", Feuerwehr: "+(state.einsatz.feuerwehr?"ja":"nein"));
-    addLine("");
+    const pageWidth = doc.internal.pageSize.getWidth();   // 210mm
+    const pageHeight = doc.internal.pageSize.getHeight();  // 297mm
+    const margin = 12;
+    const contentWidth = pageWidth - 2 * margin;
+    let yPos = margin;
 
-    addLine("Fahrzeuge");
-    state.fahrzeuge.forEach(f=>{
-      addLine(" - "+f.frn+" ("+f.typ+")");
-      if (state.einsatz && state.einsatz.ersteFahrzeugId===f.id) addLine("   * ersteintreffend");
-      if (f.standortId) addLine("   Standort: "+getStandortName(f.standortId));
-      if (f.zielKlinikId) {
-        const k = getKlinikById(f.zielKlinikId);
-        if (k) addLine("   Zielklinik: "+k.name);
+    const colors = {
+      rot: [239, 68, 68],
+      gelb: [245, 158, 11],
+      gruen: [34, 197, 94],
+      schwarz: [17, 24, 39],
+      header: [31, 41, 55],
+      subheader: [107, 114, 128],
+      border: [229, 231, 235],
+      text: [31, 41, 55]
+    };
+
+    // Schriftarten
+    doc.setFont("Helvetica");
+
+    // ====== SEITE 1: ÜBERSICHT ======
+    
+    // Titel
+    doc.setFontSize(20);
+    doc.setTextColor(...colors.header);
+    doc.text("Einsatzbericht", margin, yPos);
+    yPos += 8;
+
+    // Einsatzdatum
+    doc.setFontSize(11);
+    doc.setTextColor(...colors.text);
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("de-DE", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    doc.text("Erzeugung: " + dateStr, margin, yPos);
+    yPos += 6;
+
+    // Trennlinie
+    doc.setDrawColor(...colors.border);
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPos, pageWidth - margin, yPos);
+    yPos += 6;
+
+    // Übersicht Einsatz-Daten
+    const einsatzData = [
+      ["Einsätze insgesamt", state.einsaetze.length + ""],
+      ["Fahrzeuge", state.fahrzeuge.length + ""],
+      ["Kliniken", state.kliniken.length + ""],
+      ["Patienten transportiert", state.patients.length + ""]
+    ];
+
+    doc.setFontSize(10);
+    einsatzData.forEach((row, idx) => {
+      if (yPos > pageHeight - 20) {
+        doc.addPage();
+        yPos = margin;
       }
-      f.statusHistory.forEach(s=>{
-        const def=STATUS_DEFS[s.status];
-        const from=formatDateTime(s.from);
-        const to=s.to?formatDateTime(s.to):"-";
-        const dur=formatDuration((s.to?new Date(s.to):new Date())-new Date(s.from));
-        addLine("   "+def.code+" "+def.label+" | "+from+" → "+to+" ("+dur+")");
+      doc.setTextColor(...colors.subheader);
+      doc.text(row[0] + ":", margin, yPos);
+      doc.setTextColor(...colors.header);
+      doc.text(row[1], margin + 50, yPos);
+      yPos += 5;
+    });
+    yPos += 4;
+
+    // Einsätze im Detail (mit Farben und Symbolen)
+    if (state.einsaetze.length > 0) {
+      doc.setFontSize(12);
+      doc.setTextColor(...colors.header);
+      doc.text("Einsätze:", margin, yPos);
+      yPos += 5;
+
+      state.einsaetze.forEach((e, idx) => {
+        if (yPos > pageHeight - 30) {
+          doc.addPage();
+          yPos = margin;
+        }
+        
+        // Einsatz-Box
+        doc.setDrawColor(...colors.border);
+        doc.setFillColor(250, 250, 250);
+        doc.rect(margin + 2, yPos - 2, contentWidth - 4, 18, "F");
+        doc.rect(margin + 2, yPos - 2, contentWidth - 4, 18);
+
+        doc.setFontSize(9);
+        doc.setTextColor(...colors.header);
+        doc.setFont("Helvetica", "bold");
+        doc.text("Einsatz #" + e.id + ": " + e.name, margin + 4, yPos + 2);
+
+        doc.setFont("Helvetica", "normal");
+        doc.setTextColor(...colors.text);
+        doc.setFontSize(8);
+        doc.text("Ort: " + e.location, margin + 4, yPos + 6);
+        doc.text("Lage: " + e.lageklasse, margin + 4, yPos + 9);
+        doc.text("Gesamtpatienten: " + (e.gesamtPatienten || 0), margin + 4, yPos + 12);
+
+        yPos += 20;
       });
-    });
-    addLine("");
+    }
 
-    addLine("Kliniktransporte");
-    state.transports.forEach(t=>{
-      const f=state.fahrzeuge.find(x=>x.id===t.fahrzeugId);
-      const k=state.kliniken.find(x=>x.id===t.klinikId);
-      addLine("- "+formatDateTime(t.time)+": "+(f?f.frn:"?")+" → "+(k?k.name:"?")+", "+t.kat+", "+t.anzahl+" Pat.");
-    });
-    addLine("");
+    yPos += 4;
 
-    addLine("Patientenverteilung je Klinik");
-    state.kliniken.forEach(k=>{
-      const s=countPatientsPerClinic(k.id);
-      const total=s.rot+s.gelb+s.gruen+s.schwarz;
-      addLine(
-        k.name+
-        ": Rot="+s.rot+
-        ", Gelb="+s.gelb+
-        ", Grün="+s.gruen+
-        ", Schwarz="+s.schwarz+
-        ", gesamt="+total
-      );
-    });
-    addLine("");
+    // ====== SEITE 2: FAHRZEUGE & STATUS ======
+    
+    if (yPos > pageHeight - 50) {
+      doc.addPage();
+      yPos = margin;
+    }
 
-    addLine("Vollständiges Logbuch");
-    const logs=[...state.logs].sort((a,b)=>new Date(a.time)-new Date(b.time));
-    logs.forEach(l=>{
-      let line=formatDateTime(l.time)+" ";
-      if (l.type==="status") {
-        const f=state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
-        const old=l.oldStatus?STATUS_DEFS[l.oldStatus]:null;
-        const neu=STATUS_DEFS[l.newStatus];
-        line+=(f?f.frn:"?")+" Status "+(old?old.code:"-")+" → "+neu.code;
-      } else if (l.type==="transport") {
-        const f=state.fahrzeuge.find(x=>x.id===l.fahrzeugId);
-        const k=state.kliniken.find(x=>x.id===l.klinikId);
-        line+=(f?f.frn:"?")+" Transport zu "+(k?k.name:"?")+" "+l.kat+" ("+l.anzahl+" Pat.)";
-      } else if (l.type==="text") {
-        line+="TEXT: "+l.text;
-      } else if (l.type==="system") {
-        line+="SYSTEM: "+l.text;
+    doc.setFontSize(14);
+    doc.setTextColor(...colors.header);
+    doc.text("Fahrzeuge & Statusmeldungen", margin, yPos);
+    yPos += 7;
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
+    yPos += 4;
+
+    const statusNames = {
+      1: "Im Dienst",
+      2: "Verfügbar",
+      3: "Im Einsatz",
+      4: "Am Einsatzort",
+      5: "Rückfahrt",
+      6: "Im Dienst",
+      7: "Zum Zielort",
+      8: "Station"
+    };
+
+    const statusColors = {
+      1: [34, 197, 94],
+      2: [34, 197, 94],
+      3: [245, 158, 11],
+      4: [239, 68, 68],
+      5: [245, 158, 11],
+      6: [34, 197, 94],
+      7: [59, 130, 246],
+      8: [107, 114, 128]
+    };
+
+    doc.setFontSize(9);
+    state.fahrzeuge.forEach((f) => {
+      if (yPos > pageHeight - 20) {
+        doc.addPage();
+        yPos = margin;
       }
-      addLine(line);
+
+      // Fahrzeug-Kopfzeile
+      doc.setFont("Helvetica", "bold");
+      doc.setTextColor(...colors.header);
+      doc.text(f.frn + " (" + f.typ + ")", margin, yPos);
+
+      // Status-Box
+      const statusCol = statusColors[f.currentStatus] || [107, 114, 128];
+      doc.setFillColor(...statusCol);
+      doc.setDrawColor(...statusCol);
+      const statusW = 40;
+      doc.rect(pageWidth - margin - statusW, yPos - 3, statusW - 1, 5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.setFont("Helvetica", "normal");
+      doc.text(statusNames[f.currentStatus] || "Unbekannt", pageWidth - margin - statusW + 2, yPos, { maxWidth: statusW - 3 });
+
+      yPos += 5;
+
+      // Details
+      doc.setTextColor(...colors.text);
+      doc.setFontSize(8);
+      doc.setFont("Helvetica", "normal");
+      
+      const details = [
+        "Besatzung: " + (f.besatzung || "—"),
+        "Einsatz: " + (state.einsaetze.find(e => e.id === f.einsatzId)?.name || "—"),
+        "Patienten: " + (f.transportPatients || 0),
+        "Zielklinik: " + (f.zielKlinikId ? (state.kliniken.find(k => k.id === f.zielKlinikId)?.name || "—") : "—")
+      ];
+
+      details.forEach(detail => {
+        doc.text(detail, margin + 2, yPos);
+        yPos += 3;
+      });
+
+      yPos += 2;
     });
 
-    doc.save("einsatzbericht.pdf");
+    // ====== SEITE 3: KLINIKEN & KAPAZITÄTEN ======
+    
+    if (yPos > pageHeight - 50) {
+      doc.addPage();
+      yPos = margin;
+    }
+
+    doc.setFontSize(14);
+    doc.setTextColor(...colors.header);
+    doc.text("Kliniken & Kapazitäten", margin, yPos);
+    yPos += 7;
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
+    yPos += 4;
+
+    doc.setFontSize(9);
+    state.kliniken.forEach((k) => {
+      if (yPos > pageHeight - 40) {
+        doc.addPage();
+        yPos = margin;
+      }
+
+      // Klinik-Name
+      doc.setFont("Helvetica", "bold");
+      doc.setTextColor(...colors.header);
+      doc.text(k.name, margin, yPos);
+      yPos += 4;
+
+      // Kapazitäts-Tabelle (kompakt)
+      doc.setFontSize(8);
+      doc.setFont("Helvetica", "normal");
+
+      const categories = [
+        { label: "Rot", free: k.freeRot, cap: k.capRot, color: colors.rot },
+        { label: "Gelb", free: k.freeGelb, cap: k.capGelb, color: colors.gelb },
+        { label: "Grün", free: k.freeGruen, cap: k.capGruen, color: colors.gruen },
+        { label: "Schwarz", free: k.freeSchwarz, cap: k.capSchwarz, color: colors.schwarz }
+      ];
+
+      const cellWidth = (contentWidth - 4) / 4;
+      let xPos = margin + 2;
+
+      categories.forEach((cat) => {
+        // Kopf
+        doc.setFillColor(...cat.color);
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("Helvetica", "bold");
+        doc.rect(xPos, yPos, cellWidth, 4, "F");
+        doc.text(cat.label, xPos + 2, yPos + 2.5, { align: "left" });
+
+        // Wert
+        doc.setFont("Helvetica", "normal");
+        doc.setTextColor(...colors.text);
+        doc.rect(xPos, yPos + 4, cellWidth, 4);
+        const valText = (cat.free ?? cat.cap) + "/" + (cat.cap || "—");
+        doc.text(valText, xPos + 2, yPos + 6.5, { align: "left", maxWidth: cellWidth - 2 });
+
+        xPos += cellWidth;
+      });
+
+      yPos += 12;
+
+      // Patienten in dieser Klinik
+      const patientsHere = state.patients.filter(p => p.klinikId === k.id);
+      if (patientsHere.length > 0) {
+        doc.setFontSize(7);
+        doc.setTextColor(...colors.subheader);
+        doc.text("Patienten: " + patientsHere.length, margin + 2, yPos);
+        yPos += 2;
+
+        patientsHere.forEach((p) => {
+          const f = state.fahrzeuge.find(v => v.id === p.fahrzeugId);
+          const timeStr = new Date(p.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+          
+          // Farbe
+          doc.setFillColor(...(colors[p.kat] || colors.schwarz));
+          doc.circle(margin + 3, yPos + 0.5, 1, "F");
+          
+          // Text
+          doc.setTextColor(...colors.text);
+          const patStr = (p.name || "Pat.") + " (" + (f?.frn || "—") + ") " + timeStr;
+          doc.text(patStr, margin + 5, yPos + 1);
+          yPos += 2.5;
+        });
+      }
+
+      yPos += 3;
+    });
+
+    // ====== SEITE 4: ZUSAMMENFASSUNG ======
+    
+    if (yPos > pageHeight - 40) {
+      doc.addPage();
+      yPos = margin;
+    }
+
+    doc.setFontSize(14);
+    doc.setTextColor(...colors.header);
+    doc.text("Zusammenfassung", margin, yPos);
+    yPos += 7;
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPos - 2, pageWidth - margin, yPos - 2);
+    yPos += 4;
+
+    // Statistiken
+    const rotCount = state.patients.filter(p => p.kat === "rot").length;
+    const gelbCount = state.patients.filter(p => p.kat === "gelb").length;
+    const gruenCount = state.patients.filter(p => p.kat === "gruen").length;
+    const schwarzCount = state.patients.filter(p => p.kat === "schwarz").length;
+
+    doc.setFontSize(10);
+    doc.setFont("Helvetica", "bold");
+    doc.text("Patienten nach Kategorie:", margin, yPos);
+    yPos += 5;
+
+    const statData = [
+      ["Rot (kritisch):", rotCount + "", colors.rot],
+      ["Gelb (dringlich):", gelbCount + "", colors.gelb],
+      ["Grün (leicht):", gruenCount + "", colors.gruen],
+      ["Schwarz:", schwarzCount + "", colors.schwarz]
+    ];
+
+    doc.setFontSize(9);
+    doc.setFont("Helvetica", "normal");
+    statData.forEach((row) => {
+      doc.setTextColor(...row[2]);
+      doc.text(row[0], margin, yPos);
+      doc.text(row[1], margin + 50, yPos);
+      yPos += 5;
+    });
+
+    yPos += 4;
+
+    // Kapazitäts-Übersicht
+    doc.setFont("Helvetica", "bold");
+    doc.setTextColor(...colors.header);
+    doc.text("Gesamtkapazität (aktuell):", margin, yPos);
+    yPos += 5;
+
+    let totalCapRot = 0, totalCapGelb = 0, totalCapGruen = 0, totalCapSchwarz = 0;
+    let totalFreeRot = 0, totalFreeGelb = 0, totalFreeGruen = 0, totalFreeSchwarz = 0;
+
+    state.kliniken.forEach(k => {
+      totalCapRot += k.capRot || 0;
+      totalCapGelb += k.capGelb || 0;
+      totalCapGruen += k.capGruen || 0;
+      totalCapSchwarz += k.capSchwarz || 0;
+      totalFreeRot += k.freeRot ?? k.capRot || 0;
+      totalFreeGelb += k.freeGelb ?? k.capGelb || 0;
+      totalFreeGruen += k.freeGruen ?? k.capGruen || 0;
+      totalFreeSchwarz += k.freeSchwarz ?? k.capSchwarz || 0;
+    });
+
+    doc.setFontSize(9);
+    doc.setFont("Helvetica", "normal");
+    const capSummary = [
+      ["Rot: ", totalFreeRot + "/" + totalCapRot, colors.rot],
+      ["Gelb: ", totalFreeGelb + "/" + totalCapGelb, colors.gelb],
+      ["Grün: ", totalFreeGruen + "/" + totalCapGruen, colors.gruen],
+      ["Schwarz: ", totalFreeSchwarz + "/" + totalCapSchwarz, colors.schwarz]
+    ];
+
+    capSummary.forEach((row) => {
+      doc.setTextColor(...row[2]);
+      doc.text(row[0], margin, yPos);
+      doc.text(row[1], margin + 40, yPos);
+      yPos += 5;
+    });
+
+    // ====== FOOTER auf allen Seiten ======
+    const pageCount = doc.internal.pages.length - 1;
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(...colors.subheader);
+      const footerY = pageHeight - 8;
+      doc.text("Seite " + i + " von " + pageCount, pageWidth / 2, footerY, { align: "center" });
+      doc.text("© 2026 Einsatzmanagement – " + dateStr.split(",")[0], margin, footerY);
+    }
+
+    // PDF herunterladen
+    doc.save("Einsatzbericht_" + now.toISOString().split("T")[0] + ".pdf");
   }
 
   function tickTimers(){
